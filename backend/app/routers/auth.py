@@ -9,8 +9,15 @@ from app.database import get_db
 from app.deps import get_client_ip, get_current_user
 from app.geoip import lookup as geoip_lookup
 from app.mailer import send_alert
-from app.models import AttemptStatus, LoginAttempt, User
-from app.schemas import LoginRequest, LoginResponse, MeResponse, MfaVerifyRequest, MfaVerifyResponse
+from app.models import AttemptStatus, LoginAttempt, SecurityAlert, User
+from app.schemas import (
+    LoginRequest,
+    LoginResponse,
+    MeResponse,
+    MfaVerifyRequest,
+    MfaVerifyResponse,
+    UpdateProfileRequest,
+)
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 settings = get_settings()
@@ -30,6 +37,13 @@ def _log_attempt(db: Session, *, username, status_: AttemptStatus, ip: str, user
         )
     )
     db.commit()
+
+
+def _alert(db: Session, *, subject: str, detail: str, username: str | None, ip: str | None):
+    """Log the alert for the dashboard and send it by email (if configured)."""
+    db.add(SecurityAlert(subject=subject, detail=detail, username=username, ip_address=ip))
+    db.commit()
+    send_alert(subject, detail)
 
 
 @router.post("/login", response_model=LoginResponse)
@@ -64,10 +78,13 @@ def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db)
         _log_attempt(db, username=user.username, status_=AttemptStatus.PASSWORD_FAIL, ip=ip, user_agent=ua)
 
         if not ip_result.allowed or not user_result.allowed:
-            send_alert(
-                "Compte verrouillé après échecs répétés",
-                f"Le compte '{user.username}' (ou l'IP {ip}) a été verrouillé "
+            _alert(
+                db,
+                subject="Compte verrouillé après échecs répétés",
+                detail=f"Le compte '{user.username}' (ou l'IP {ip}) a été verrouillé "
                 f"après plusieurs échecs de mot de passe.",
+                username=user.username,
+                ip=ip,
             )
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid credentials")
 
@@ -102,10 +119,13 @@ def verify_mfa(payload: MfaVerifyRequest, request: Request, response: Response, 
 
         fails = rate_limit.consecutive_failures("mfa", username)
         if fails >= settings.mfa_alert_failure_threshold:
-            send_alert(
-                "Echecs de code de confirmation répétés",
-                f"Le compte '{username}' a échoué la vérification en 2 étapes "
+            _alert(
+                db,
+                subject="Echecs de code de confirmation répétés",
+                detail=f"Le compte '{username}' a échoué la vérification en 2 étapes "
                 f"{fails} fois de suite depuis l'IP {ip} ({ua}).",
+                username=username,
+                ip=ip,
             )
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid code")
 
@@ -134,4 +154,28 @@ def logout(response: Response):
 
 @router.get("/me", response_model=MeResponse)
 def me(user: User = Depends(get_current_user)):
-    return MeResponse(username=user.username, email=user.email, is_admin=user.is_admin)
+    return MeResponse(
+        username=user.username,
+        email=user.email,
+        is_admin=user.is_admin,
+        display_name=user.display_name,
+        avatar_url=user.avatar_url,
+    )
+
+
+@router.patch("/me", response_model=MeResponse)
+def update_me(payload: UpdateProfileRequest, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if payload.display_name is not None:
+        user.display_name = payload.display_name or None
+    if payload.avatar_url is not None:
+        user.avatar_url = payload.avatar_url or None
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return MeResponse(
+        username=user.username,
+        email=user.email,
+        is_admin=user.is_admin,
+        display_name=user.display_name,
+        avatar_url=user.avatar_url,
+    )

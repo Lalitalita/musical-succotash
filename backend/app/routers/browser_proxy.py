@@ -23,6 +23,30 @@ router = APIRouter(prefix="/api/browser", tags=["browser"])
 settings = get_settings()
 logger = logging.getLogger("webdesktop.browser")
 
+
+class BrowserFetchError(Exception):
+    def __init__(self, status_code: int, message: str):
+        super().__init__(message)
+        self.status_code = status_code
+        self.message = message
+
+
+def _error_page(message: str) -> Response:
+    page = (
+        "<!doctype html><html><head><meta charset='utf-8'>"
+        "<title>Page inaccessible</title>"
+        "<style>body{font-family:'Segoe UI',sans-serif;color:#444;background:#fff;"
+        "display:flex;align-items:center;justify-content:center;height:100vh;margin:0;}"
+        ".box{max-width:420px;text-align:center;padding:24px;}"
+        ".box .glyph{font-size:40px;margin-bottom:12px;}"
+        "</style></head><body><div class='box'>"
+        "<div class='glyph'>&#9888;</div>"
+        "<h3>Impossible de charger cette page</h3>"
+        f"<p>{message}</p>"
+        "</div></body></html>"
+    )
+    return Response(content=page, media_type="text/html")
+
 _MAX_REDIRECTS = 5
 
 _ASSET_CONTENT_TYPES = (
@@ -55,7 +79,7 @@ def _fetch(url: str, headers: dict | None = None) -> tuple[httpx.Response, str]:
         try:
             validate_url(current)
         except UnsafeUrlError as exc:
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc))
+            raise BrowserFetchError(status.HTTP_400_BAD_REQUEST, str(exc))
 
         with httpx.Client(follow_redirects=False, timeout=settings.browser_proxy_timeout_seconds) as client:
             try:
@@ -63,18 +87,20 @@ def _fetch(url: str, headers: dict | None = None) -> tuple[httpx.Response, str]:
                     current,
                     headers={"User-Agent": settings.browser_proxy_user_agent, **(headers or {})},
                 )
+            except httpx.TimeoutException:
+                raise BrowserFetchError(status.HTTP_504_GATEWAY_TIMEOUT, "Le site a mis trop de temps à répondre.")
             except httpx.HTTPError as exc:
-                raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Upstream fetch failed: {exc}")
+                raise BrowserFetchError(status.HTTP_502_BAD_GATEWAY, f"La requête vers le site a échoué ({exc}).")
 
         if resp.is_redirect:
             location = resp.headers.get("location")
             if not location:
-                raise HTTPException(status.HTTP_502_BAD_GATEWAY, "Redirect without location")
+                raise BrowserFetchError(status.HTTP_502_BAD_GATEWAY, "Redirection sans destination.")
             current = urljoin(current, location)
             continue
         return resp, current
 
-    raise HTTPException(status.HTTP_502_BAD_GATEWAY, "Too many redirects")
+    raise BrowserFetchError(status.HTTP_502_BAD_GATEWAY, "Trop de redirections.")
 
 
 def _rewrite_html(html: str, base_url: str) -> str:
@@ -125,11 +151,14 @@ def _rewrite_html(html: str, base_url: str) -> str:
 
 @router.get("/view", response_class=Response)
 def view(url: str = Query(...), user: User = Depends(get_current_user)):
-    resp, final_url = _fetch(url)
-    content_type = resp.headers.get("content-type", "")
+    try:
+        resp, final_url = _fetch(url)
+    except BrowserFetchError as exc:
+        return _error_page(exc.message)
 
+    content_type = resp.headers.get("content-type", "")
     if "text/html" not in content_type:
-        raise HTTPException(status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, "Only HTML pages can be viewed directly.")
+        return _error_page("Cette adresse ne renvoie pas une page web (type de contenu non pris en charge).")
 
     content = resp.content[: settings.browser_proxy_max_bytes]
     try:
@@ -151,7 +180,11 @@ def view(url: str = Query(...), user: User = Depends(get_current_user)):
 
 @router.get("/asset")
 def asset(url: str = Query(...), user: User = Depends(get_current_user)):
-    resp, _ = _fetch(url)
+    try:
+        resp, _ = _fetch(url)
+    except BrowserFetchError as exc:
+        raise HTTPException(exc.status_code, exc.message)
+
     content_type = resp.headers.get("content-type", "application/octet-stream")
 
     if not any(content_type.startswith(p) for p in _ASSET_CONTENT_TYPES):

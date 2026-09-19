@@ -51,6 +51,10 @@ class Settings(BaseSettings):
     # --- GeoIP ---
     geoip_db_path: str = "/app/geoip/GeoLite2-City.mmdb"
 
+    # --- User uploads (avatars, bookmark icons) ---
+    uploads_dir: str = "/app/uploads"
+    upload_max_bytes: int = 2 * 1024 * 1024
+
     # --- Browser proxy ---
     browser_proxy_timeout_seconds: int = 12
     browser_proxy_max_bytes: int = 3 * 1024 * 1024

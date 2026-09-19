@@ -2,7 +2,7 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Enum, Integer, String
+from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -21,7 +21,45 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     totp_secret: Mapped[str] = mapped_column(String(64), nullable=False)
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False)
+    display_name: Mapped[str] = mapped_column(String(64), nullable=True)
+    avatar_url: Mapped[str] = mapped_column(String(512), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class Bookmark(Base):
+    __tablename__ = "bookmarks"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), index=True, nullable=False)
+    title: Mapped[str] = mapped_column(String(128), nullable=False)
+    url: Mapped[str] = mapped_column(String(2048), nullable=False)
+    icon_url: Mapped[str] = mapped_column(String(512), nullable=True)
+    position: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class DesktopState(Base):
+    """A single opaque JSON blob per user: open windows, browser tabs,
+    wallpaper/accent, pinned app URLs. Saved on logout, restored on login."""
+
+    __tablename__ = "desktop_states"
+
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), primary_key=True)
+    state_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class SecurityAlert(Base):
+    """Log of every security email alert actually sent, for the dashboard."""
+
+    __tablename__ = "security_alerts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    timestamp: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+    subject: Mapped[str] = mapped_column(String(255), nullable=False)
+    detail: Mapped[str] = mapped_column(Text, nullable=False)
+    username: Mapped[str] = mapped_column(String(64), nullable=True)
+    ip_address: Mapped[str] = mapped_column(String(64), nullable=True)
 
 
 class AttemptStatus(str, enum.Enum):

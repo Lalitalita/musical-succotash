@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { api, ApiError } from "../api/client";
 import type { Me } from "../types";
+import { restoreDesktopState, saveDesktopState } from "./persistence";
 
 type AuthStage = "checking" | "login" | "mfa" | "authenticated";
 
@@ -14,6 +15,7 @@ interface AuthState {
   verifyMfa: (rawCode: string) => Promise<void>;
   logout: () => Promise<void>;
   clearError: () => void;
+  updateProfile: (patch: { display_name?: string; avatar_url?: string }) => Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
@@ -26,6 +28,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     try {
       const me = await api.get<Me>("/auth/me");
       set({ me, stage: "authenticated" });
+      await restoreDesktopState();
     } catch {
       set({ stage: "login" });
     }
@@ -52,15 +55,22 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       await api.post("/auth/mfa", { mfa_token: mfaToken, code: rawCode });
       const me = await api.get<Me>("/auth/me");
       set({ me, stage: "authenticated", mfaToken: null });
+      await restoreDesktopState();
     } catch (e) {
       set({ error: e instanceof ApiError ? e.message : "Code invalide" });
     }
   },
 
   logout: async () => {
+    await saveDesktopState();
     await api.post("/auth/logout").catch(() => undefined);
     set({ me: null, stage: "login", mfaToken: null });
   },
 
   clearError: () => set({ error: null }),
+
+  updateProfile: async (patch) => {
+    const me = await api.patch<Me>("/auth/me", patch);
+    set({ me });
+  },
 }));

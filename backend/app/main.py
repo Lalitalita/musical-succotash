@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
 from app.init_db import init_db
-from app.routers import admin, auth, browser_proxy
+from app.routers import admin, auth, bookmarks, browser_proxy, desktop, uploads
 
 logging.basicConfig(level=logging.INFO)
 settings = get_settings()
@@ -35,3 +35,6 @@ def health():
 app.include_router(auth.router)
 app.include_router(admin.router)
 app.include_router(browser_proxy.router)
+app.include_router(bookmarks.router)
+app.include_router(desktop.router)
+app.include_router(uploads.router)

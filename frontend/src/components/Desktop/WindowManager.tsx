@@ -1,6 +1,7 @@
 import { useWindowStore } from "../../state/windowStore";
 import { BrowserApp } from "../Apps/BrowserApp/BrowserApp";
 import { SecurityDashboard } from "../Apps/SecurityDashboard/SecurityDashboard";
+import { SettingsApp } from "../Apps/Settings/SettingsApp";
 import { Window } from "./Window";
 
 function AboutApp() {
@@ -20,8 +21,9 @@ export function WindowManager() {
     <>
       {windows.map((win) => (
         <Window key={win.id} win={win}>
-          {win.appId === "browser" && <BrowserApp />}
+          {win.appId === "browser" && <BrowserApp windowId={win.id} initialUrl={win.initialUrl} />}
           {win.appId === "security-dashboard" && <SecurityDashboard />}
+          {win.appId === "settings" && <SettingsApp />}
           {win.appId === "about" && <AboutApp />}
         </Window>
       ))}

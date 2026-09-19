@@ -85,3 +85,15 @@ def reset_failures(prefix: str, key: str) -> None:
 def consecutive_failures(prefix: str, key: str) -> int:
     val = _redis.get(_fail_count_key(prefix, key))
     return int(val) if val else 0
+
+
+def list_active_locks() -> list[dict]:
+    """Scan for every currently-active lockout, for the security dashboard."""
+    locks = []
+    for raw_key in _redis.scan_iter(match="lock:*:*", count=100):
+        ttl = _redis.ttl(raw_key)
+        if not ttl or ttl <= 0:
+            continue
+        _, scope, key = raw_key.split(":", 2)
+        locks.append({"scope": scope, "key": key, "retry_after_seconds": ttl})
+    return sorted(locks, key=lambda l: -l["retry_after_seconds"])
