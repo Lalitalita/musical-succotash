@@ -6,7 +6,7 @@ export interface Me {
   avatar_url: string | null;
 }
 
-export type AppId = "browser" | "security-dashboard" | "about" | "settings";
+export type AppId = "browser" | "security-dashboard" | "about" | "settings" | "files";
 
 export interface WindowInstance {
   id: string;
@@ -69,11 +69,18 @@ export interface Bookmark {
   position: number;
 }
 
+export type BrowserTabMode = "text" | "full";
+
 export interface BrowserTab {
   id: string;
   title: string;
   address: string;
   src: string | null;
+  mode: BrowserTabMode;
+  /** Bumped on every explicit navigate()/reload() while in full mode, so the
+   * remote-control view knows to send a fresh navigation - as opposed to
+   * merely being remounted when the user switches tabs. */
+  navSeq: number;
 }
 
 export interface DesktopSettings {
@@ -89,3 +96,21 @@ export const DEFAULT_SETTINGS: DesktopSettings = {
   mailUrl: "",
   calendarUrl: "",
 };
+
+export interface DesktopItem {
+  id: string;
+  label: string;
+  icon: string;
+  kind: "app" | "url";
+  appId?: AppId;
+  url?: string;
+}
+
+export interface FileEntry {
+  name: string;
+  is_dir: boolean;
+  size: number;
+  mtime: string;
+}
+
+export type FileSource = "local" | "smb";

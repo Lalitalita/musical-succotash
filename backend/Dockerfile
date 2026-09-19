@@ -9,6 +9,12 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Full-browser mode (Playwright + Chromium): only pulled in for sites that
+# genuinely need JavaScript, opted into per-tab from the desktop. This is
+# the heaviest part of the image - `--with-deps` installs the many system
+# libraries Chromium needs via apt.
+RUN playwright install --with-deps chromium
+
 COPY app ./app
 
 ENV PYTHONUNBUFFERED=1

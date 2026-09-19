@@ -2,6 +2,8 @@ import { FormEvent, useEffect, useState } from "react";
 import { openContextMenu } from "../../../state/contextMenuStore";
 import { useBookmarksStore } from "../../../state/bookmarksStore";
 import { useBrowserStore } from "../../../state/browserStore";
+import { normalizeUrl } from "../../../utils/url";
+import { RemoteFrame } from "./RemoteFrame";
 
 interface Props {
   windowId: string;
@@ -9,7 +11,7 @@ interface Props {
 }
 
 export function BrowserApp({ windowId, initialUrl }: Props) {
-  const { byWindow, ensureWindow, addTab, closeTab, setActiveTab, navigate } = useBrowserStore();
+  const { byWindow, ensureWindow, addTab, closeTab, setActiveTab, navigate, reload, setMode } = useBrowserStore();
   const { bookmarks, loaded, load, add, remove } = useBookmarksStore();
   const [addressInput, setAddressInput] = useState("");
   const [addingBookmark, setAddingBookmark] = useState(false);
@@ -62,6 +64,12 @@ export function BrowserApp({ windowId, initialUrl }: Props) {
             key={tab.id}
             className={`browser-tab ${tab.id === win.activeTabId ? "active" : ""}`}
             onClick={() => setActiveTab(windowId, tab.id)}
+            onContextMenu={(e) =>
+              openContextMenu(e, [
+                { label: "Recharger", icon: "⟳", onSelect: () => reload(windowId, tab.id) },
+                { label: "Fermer", icon: "✕", danger: true, separatorBefore: true, onSelect: () => closeTab(windowId, tab.id) },
+              ])
+            }
           >
             <span className="browser-tab-title">{tab.title}</span>
             <span
@@ -89,12 +97,29 @@ export function BrowserApp({ windowId, initialUrl }: Props) {
         <button type="submit">Aller</button>
         <button
           type="button"
+          className="browser-reload"
+          title="Recharger"
+          onClick={() => reload(windowId, activeTab.id)}
+          disabled={!activeTab.address}
+        >
+          ⟳
+        </button>
+        <button
+          type="button"
           className="browser-star"
           title="Ajouter aux favoris"
           onClick={() => setAddingBookmark((v) => !v)}
           disabled={!activeTab.address}
         >
           ☆
+        </button>
+        <button
+          type="button"
+          className={`browser-mode-toggle ${activeTab.mode === "full" ? "active" : ""}`}
+          title="Mode complet : un vrai navigateur (JS activé) pour les sites qui ne s'affichent pas correctement en mode texte. Plus lourd en bande passante."
+          onClick={() => setMode(windowId, activeTab.id, activeTab.mode === "full" ? "text" : "full")}
+        >
+          {activeTab.mode === "full" ? "Mode complet" : "Mode texte"}
         </button>
       </form>
 
@@ -132,7 +157,7 @@ export function BrowserApp({ windowId, initialUrl }: Props) {
 
       <div className="browser-frame-wrap">
         {win.tabs.map((tab) =>
-          tab.src ? (
+          tab.mode !== "full" && tab.src ? (
             <iframe
               key={tab.id}
               title={tab.title}
@@ -142,7 +167,17 @@ export function BrowserApp({ windowId, initialUrl }: Props) {
             />
           ) : null
         )}
-        {!activeTab.src && <div className="browser-empty">Saisissez une adresse pour commencer.</div>}
+        {activeTab.mode === "full" && (
+          <RemoteFrame
+            key={activeTab.id}
+            tabId={activeTab.id}
+            initialUrl={normalizeUrl(activeTab.address) || "about:blank"}
+            navSeq={activeTab.navSeq}
+          />
+        )}
+        {activeTab.mode !== "full" && !activeTab.src && (
+          <div className="browser-empty">Saisissez une adresse pour commencer.</div>
+        )}
       </div>
     </div>
   );

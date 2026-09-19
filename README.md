@@ -112,12 +112,40 @@ URL au backend (`GET /api/browser/view?url=...`), qui :
 4. Renvoie du HTML texte pur, affiché dans une `<iframe sandbox>` sans
    exécution de script côté client.
 
-Les assets (CSS/images/fonts) transitent par `GET /api/browser/asset` avec
-la même protection SSRF et une limite de taille (`BROWSER_PROXY_MAX_BYTES`).
+Les assets (CSS/images/fonts/**vidéo/audio**) transitent par
+`GET /api/browser/asset`, avec la même protection SSRF, streaming et support
+des requêtes `Range` (lecture/seek vidéo sans tout charger en mémoire, plafond
+`BROWSER_PROXY_MAX_STREAM_BYTES`). Les formulaires `GET` et `POST` sont
+proxifiés correctement (le formulaire de recherche Google, par exemple,
+fonctionne : le champ caché `__wd_url` transporte la cible réelle puisqu'un
+`<form method="get">` remplace toujours la query string de son `action` par
+ses propres champs au moment de la soumission).
 
 La fenêtre Navigateur gère plusieurs onglets indépendants (chacun garde son
-HTML chargé quand on change d'onglet) et une barre de favoris personnels
-(`/api/bookmarks`, avec icône personnalisable par URL d'image).
+HTML chargé quand on change d'onglet, avec un bouton recharger par onglet) et
+une barre de favoris personnels (`/api/bookmarks`, avec icône personnalisable
+par URL d'image).
+
+### Mode complet (Playwright) - au cas par cas
+
+Le mode texte n'exécute jamais de JavaScript : les sites qui en ont besoin
+pour s'afficher (SPA modernes type Instagram, webmail avec skin JS...)
+resteront cassés ou illisibles. Pour ces cas, chaque onglet a un bouton
+**Mode texte / Mode complet** qui bascule vers un vrai onglet Chromium headless
+piloté côté serveur (`backend/app/full_browser.py`) :
+
+- Le rendu est capturé en JPEG et diffusé au navigateur via WebSocket
+  (`/api/browser/full/ws`) ; la souris/clavier sont renvoyés dans l'autre sens.
+  Le poste client n'exécute jamais le JS du site, seulement des images.
+- Chaque requête réseau de la page (documents, XHR, images...) passe par le
+  même garde-fou anti-SSRF que le mode texte (`page.route` + `validate_url`).
+- Ressources plafonnées : `FULL_BROWSER_MAX_SESSIONS` sessions simultanées au
+  maximum, fermeture automatique après `FULL_BROWSER_IDLE_TIMEOUT_SECONDS`
+  d'inactivité ou `FULL_BROWSER_MAX_LIFETIME_SECONDS` au total.
+- **Compromis assumé** : nettement plus lourd en bande passante/CPU qu'un
+  chargement HTML classique - c'est un mode d'appoint, pas le comportement
+  par défaut. `FULL_BROWSER_ENABLED=false` le désactive entièrement (et évite
+  de lancer Chromium au démarrage).
 
 ## Session persistante du bureau
 
@@ -139,9 +167,56 @@ tout est restauré à l'identique.
   d'accent), Applications (URLs webmail/calendrier) et Système (état de
   l'API, accès rapide au dashboard sécurité pour les admins).
 - **Clic droit personnalisé** : bureau (actualiser, nouvelle fenêtre
-  navigateur, personnaliser), barre des tâches (restaurer/fermer une
-  fenêtre), barre de titre des fenêtres (réduire/agrandir/fermer), favoris
-  du navigateur (ouvrir/supprimer).
+  navigateur, nouveau raccourci, personnaliser), barre des tâches
+  (restaurer/fermer une fenêtre), barre de titre des fenêtres
+  (réduire/agrandir/fermer), favoris du navigateur (ouvrir/supprimer),
+  explorateur de fichiers (télécharger/supprimer).
+- **Raccourcis de bureau** : clic droit → "Nouveau raccourci" crée une icône
+  vers un site web ou une application, en plus de l'icône Navigateur fixe.
+  Persistés avec le reste de l'état du bureau.
+- **Volet horloge avec agenda** : l'heure affichée inclut les secondes ; un
+  petit calendrier du mois marque les jours ayant un événement, avec une
+  liste "Événements à venir" et un formulaire d'ajout rapide
+  (`/api/events`, CRUD minimal par utilisateur).
+
+## Comptes multiples (admin uniquement)
+
+Aucune inscription publique n'existe : seul un administrateur crée des
+comptes, depuis Paramètres → Utilisateurs (`/api/admin/users`, protégé par
+session admin). À la création, mot de passe (généré si laissé vide) et
+secret TOTP sont affichés **une seule fois** - à transmettre à la personne
+concernée hors bande. L'admin peut aussi promouvoir/rétrograder un compte,
+réinitialiser un TOTP ou supprimer un compte (le dernier compte admin ne
+peut ni être rétrogradé ni supprimé, pour ne jamais se retrouver sans accès
+admin).
+
+## Webmail Roundcube (bundled)
+
+Un conteneur Roundcube est inclus (`docker-compose.yml`), sur le réseau
+`internal` uniquement - jamais exposé publiquement ni même sur l'hôte. Il se
+connecte à votre boîte mail existante (IMAP/SMTP externe, via
+`ROUNDCUBE_IMAP_HOST`/`ROUNDCUBE_SMTP_HOST` dans `.env`). Le proxy navigateur
+(texte et mode complet) a une exception ciblée à son garde-fou anti-SSRF pour
+le seul hostname `roundcube` (`INTERNAL_PROXY_ALLOWLIST`), afin qu'il reste
+joignable depuis l'app Navigateur/le volet horloge sans ouvrir l'accès à
+n'importe quelle adresse privée. Configurez l'URL du webmail sur
+`http://roundcube` dans Paramètres → Applications (Roundcube étant assez
+JS-dépendant, le mode complet donne un meilleur résultat que le mode texte).
+
+## Explorateur de fichiers (local + SMB)
+
+Une app "Explorateur de fichiers" (`/api/files/*`) avec deux sources :
+
+- **Local** : espace personnel par utilisateur (`backend-userfiles` volume),
+  isolé - chaque compte ne voit que son propre espace.
+- **SMB** : un partage réseau unique, partagé entre tous les comptes (ex. un
+  NAS à la maison), configuré via `SMB_HOST`/`SMB_SHARE`/`SMB_USERNAME`/
+  `SMB_PASSWORD` dans `.env`. Non configuré = message explicite plutôt qu'une
+  erreur, l'onglet SMB reste simplement inutilisable.
+
+Chaque chemin envoyé par le client est validé pour interdire toute sortie du
+répertoire autorisé (`../`, chemins absolus...), aussi bien côté local que
+côté UNC pour le partage SMB.
 
 ## Arborescence
 
@@ -164,28 +239,31 @@ tout est restauré à l'identique.
 │       ├── geoip.py            # Lookups GeoLite2
 │       ├── mailer.py           # Alertes SMTP
 │       ├── deps.py             # IP réelle, garde LAN, session courante
-│       ├── browser_ssrf.py     # Validation anti-SSRF
+│       ├── browser_ssrf.py     # Validation anti-SSRF (+ allowlist interne)
+│       ├── full_browser.py     # Gestionnaire de sessions Playwright
 │       ├── init_db.py          # Bootstrap admin + migrations légères
 │       └── routers/
-│           ├── auth.py
-│           ├── admin.py
-│           ├── browser_proxy.py
-│           ├── bookmarks.py
+│           ├── auth.py, admin.py, admin_users.py
+│           ├── browser_proxy.py, full_browser.py
+│           ├── bookmarks.py, events.py, files.py
 │           ├── desktop.py      # état de session persistant
 │           └── uploads.py      # avatars / icônes de favoris
 └── frontend/
     ├── Dockerfile               # build Vite -> Nginx
-    ├── nginx.conf               # sert le SPA + proxy /api -> backend:8000
+    ├── nginx.conf               # sert le SPA + proxy /api -> backend:8000 (+ WS)
     └── src/
         ├── api/client.ts
         ├── state/
         │   ├── authStore.ts, windowStore.ts, browserStore.ts
         │   ├── settingsStore.ts, bookmarksStore.ts, contextMenuStore.ts
+        │   ├── eventsStore.ts, adminUsersStore.ts, desktopItemsStore.ts
         │   └── persistence.ts      # save/restore de l'état du bureau
         ├── components/
         │   ├── Login/{LoginForm,MfaDecoyForm}.tsx
-        │   ├── Desktop/{Desktop,Taskbar,StartMenu,ClockFlyout,ContextMenu,Window,WindowManager}.tsx
-        │   └── Apps/{BrowserApp,SecurityDashboard,Settings}/
+        │   ├── Desktop/{Desktop,Taskbar,StartMenu,ClockFlyout,ContextMenu,
+        │   │            NewShortcutForm,Window,WindowManager}.tsx
+        │   └── Apps/{BrowserApp(+RemoteFrame),SecurityDashboard,Settings(+UsersPanel),
+        │             FileExplorer}/
         └── styles/global.css     # thème Windows 11 (acrylique/mica)
 ```
 
@@ -216,4 +294,12 @@ cd frontend && npm install && npm run dev
   peine de retomber sur `Temporary failure in name resolution`.
 - Les avatars et icônes de favoris uploadés sont stockés dans le volume
   `backend-uploads` (`/app/uploads`), séparé du reste pour survivre aux
-  reconstructions d'image.
+  reconstructions d'image. Les fichiers personnels vivent dans
+  `backend-userfiles` (`/app/userfiles`), également persistant.
+- Le mode complet ouvre un vrai Chromium : gardez `FULL_BROWSER_MAX_SESSIONS`
+  raisonnable sur une petite machine, et surveillez la RAM/CPU du conteneur
+  `backend` si vous l'activez pour plusieurs comptes en parallèle.
+- `INTERNAL_PROXY_ALLOWLIST` est une liste blanche exacte de hostnames
+  (par défaut juste `roundcube`) : n'y ajoutez que des services de confiance
+  que vous avez vous-même déployés sur le réseau `internal`, jamais un nom
+  dérivé d'une entrée utilisateur.

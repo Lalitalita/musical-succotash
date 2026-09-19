@@ -18,6 +18,8 @@ volumes:
   postgres-data:
   redis-data:
   backend-uploads:
+  backend-userfiles:
+  roundcube-data:
 
 services:
   frontend:
@@ -52,6 +54,7 @@ services:
 
       TRUSTED_PROXY_HOPS: ${TRUSTED_PROXY_HOPS:-2}
       ADMIN_IP_WHITELIST: ${ADMIN_IP_WHITELIST:-}
+      INTERNAL_PROXY_ALLOWLIST: ${INTERNAL_PROXY_ALLOWLIST:-roundcube}
 
       LOGIN_MAX_ATTEMPTS_PER_WINDOW: ${LOGIN_MAX_ATTEMPTS_PER_WINDOW:-5}
       LOGIN_WINDOW_SECONDS: ${LOGIN_WINDOW_SECONDS:-300}
@@ -71,13 +74,29 @@ services:
 
       BROWSER_PROXY_TIMEOUT_SECONDS: ${BROWSER_PROXY_TIMEOUT_SECONDS:-12}
       BROWSER_PROXY_MAX_BYTES: ${BROWSER_PROXY_MAX_BYTES:-3145728}
+      BROWSER_PROXY_MAX_STREAM_BYTES: ${BROWSER_PROXY_MAX_STREAM_BYTES:-1073741824}
+
+      FULL_BROWSER_ENABLED: ${FULL_BROWSER_ENABLED:-true}
+      FULL_BROWSER_MAX_SESSIONS: ${FULL_BROWSER_MAX_SESSIONS:-3}
+      FULL_BROWSER_IDLE_TIMEOUT_SECONDS: ${FULL_BROWSER_IDLE_TIMEOUT_SECONDS:-300}
+      FULL_BROWSER_MAX_LIFETIME_SECONDS: ${FULL_BROWSER_MAX_LIFETIME_SECONDS:-3600}
+      FULL_BROWSER_FRAME_INTERVAL_MS: ${FULL_BROWSER_FRAME_INTERVAL_MS:-350}
 
       BOOTSTRAP_ADMIN_USERNAME: ${BOOTSTRAP_ADMIN_USERNAME:-admin}
       BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-admin@webdesktop.local}
       BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-}
+
+      LOCAL_FILES_ROOT: /app/userfiles
+      SMB_HOST: ${SMB_HOST:-}
+      SMB_PORT: ${SMB_PORT:-445}
+      SMB_SHARE: ${SMB_SHARE:-}
+      SMB_USERNAME: ${SMB_USERNAME:-}
+      SMB_PASSWORD: ${SMB_PASSWORD:-}
+      SMB_DOMAIN: ${SMB_DOMAIN:-}
     volumes:
       - ./backend/geoip:/app/geoip:ro
       - backend-uploads:/app/uploads
+      - backend-userfiles:/app/userfiles
     depends_on:
       postgres:
         condition: service_healthy
@@ -119,3 +138,33 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
+  # Self-hosted webmail. Never exposed publicly or even to the host: only
+  # reachable by "backend" over the "internal" network, and only through
+  # the browser proxy's INTERNAL_PROXY_ALLOWLIST ("roundcube" by default -
+  # see backend/app/browser_ssrf.py). It needs its own outbound internet
+  # access to reach your real IMAP/SMTP server, hence "internal" and not
+  # "data". Point Paramètres → Applications → "URL du webmail" at
+  # http://roundcube once IMAP_HOST/SMTP_HOST below are configured.
+  roundcube:
+    image: roundcube/roundcubemail:1.6-apache
+    restart: unless-stopped
+    networks:
+      - internal
+    environment:
+      ROUNDCUBEMAIL_DB_TYPE: sqlite
+      ROUNDCUBEMAIL_SKIN: elastic
+      ROUNDCUBEMAIL_DEFAULT_HOST: ${ROUNDCUBE_IMAP_HOST:-}
+      ROUNDCUBEMAIL_DEFAULT_PORT: ${ROUNDCUBE_IMAP_PORT:-993}
+      ROUNDCUBEMAIL_SMTP_SERVER: ${ROUNDCUBE_SMTP_HOST:-}
+      ROUNDCUBEMAIL_SMTP_PORT: ${ROUNDCUBE_SMTP_PORT:-587}
+      # Must be exactly 24 characters - generate with: openssl rand -hex 12
+      ROUNDCUBEMAIL_DES_KEY: ${ROUNDCUBE_DES_KEY:-}
+    volumes:
+      - roundcube-data:/var/roundcube/db
+    healthcheck:
+      test: ["CMD", "curl", "-fs", "http://localhost/"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s

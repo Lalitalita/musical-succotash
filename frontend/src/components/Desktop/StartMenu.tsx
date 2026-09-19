@@ -9,6 +9,7 @@ interface Props {
 
 const APPS: { id: AppId; title: string; icon: string; adminOnly?: boolean }[] = [
   { id: "browser", title: "Navigateur", icon: "🌐" },
+  { id: "files", title: "Explorateur de fichiers", icon: "📁" },
   { id: "security-dashboard", title: "Sécurité", icon: "🛡️", adminOnly: true },
   { id: "settings", title: "Paramètres", icon: "⚙️" },
   { id: "about", title: "À propos", icon: "ℹ️" },

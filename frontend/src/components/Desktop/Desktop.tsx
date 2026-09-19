@@ -1,8 +1,12 @@
 import { useState } from "react";
 import { openContextMenu } from "../../state/contextMenuStore";
+import { useDesktopItemsStore } from "../../state/desktopItemsStore";
 import { useSettingsStore } from "../../state/settingsStore";
 import { useWindowStore } from "../../state/windowStore";
+import type { AppId } from "../../types";
+import { normalizeUrl } from "../../utils/url";
 import { ContextMenu } from "./ContextMenu";
+import { NewShortcutForm } from "./NewShortcutForm";
 import { StartMenu } from "./StartMenu";
 import { Taskbar } from "./Taskbar";
 import { WindowManager } from "./WindowManager";
@@ -15,15 +19,34 @@ const WALLPAPERS: Record<string, string> = {
   slate: "linear-gradient(160deg, #232526, #414345)",
 };
 
+const APP_TITLES: Record<AppId, string> = {
+  browser: "Navigateur",
+  "security-dashboard": "Sécurité",
+  settings: "Paramètres",
+  about: "À propos",
+  files: "Explorateur de fichiers",
+};
+
 export function Desktop() {
   const [startOpen, setStartOpen] = useState(false);
   const [clockOpen, setClockOpen] = useState(false);
+  const [addingShortcut, setAddingShortcut] = useState(false);
   const { openWindow } = useWindowStore();
   const wallpaper = useSettingsStore((s) => s.wallpaper);
+  const { items, remove } = useDesktopItemsStore();
 
   function closeFlyouts() {
     setStartOpen(false);
     setClockOpen(false);
+  }
+
+  function openItem(item: (typeof items)[number]) {
+    if (item.kind === "app" && item.appId) {
+      openWindow(item.appId, APP_TITLES[item.appId] || item.label);
+    } else if (item.kind === "url" && item.url) {
+      const url = normalizeUrl(item.url);
+      openWindow("browser", item.label, { forceNew: true, initialUrl: url });
+    }
   }
 
   return (
@@ -39,6 +62,7 @@ export function Desktop() {
             icon: "🌐",
             onSelect: () => openWindow("browser", "Navigateur", { forceNew: true }),
           },
+          { label: "Nouveau raccourci", icon: "➕", onSelect: () => setAddingShortcut(true) },
           {
             label: "Personnaliser l'arrière-plan",
             icon: "🎨",
@@ -54,6 +78,22 @@ export function Desktop() {
           <span className="icon-glyph">🌐</span>
           <span>Navigateur</span>
         </button>
+        {items.map((item) => (
+          <button
+            key={item.id}
+            className="desktop-icon"
+            onDoubleClick={() => openItem(item)}
+            onContextMenu={(e) =>
+              openContextMenu(e, [
+                { label: "Ouvrir", icon: "↗", onSelect: () => openItem(item) },
+                { label: "Supprimer", icon: "🗑", danger: true, separatorBefore: true, onSelect: () => remove(item.id) },
+              ])
+            }
+          >
+            <span className="icon-glyph">{item.icon}</span>
+            <span>{item.label}</span>
+          </button>
+        ))}
       </div>
 
       <WindowManager />
@@ -72,6 +112,8 @@ export function Desktop() {
           setClockOpen((v) => !v);
         }}
       />
+
+      {addingShortcut && <NewShortcutForm onClose={() => setAddingShortcut(false)} />}
 
       <ContextMenu />
     </div>

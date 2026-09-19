@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { BrowserTab } from "../types";
+import type { BrowserTab, BrowserTabMode } from "../types";
 import { normalizeUrl, viewSrc } from "../utils/url";
 
 interface BrowserWindowState {
@@ -14,6 +14,8 @@ interface BrowserStoreState {
   closeTab: (windowId: string, tabId: string) => void;
   setActiveTab: (windowId: string, tabId: string) => void;
   navigate: (windowId: string, tabId: string, addressInput: string) => void;
+  reload: (windowId: string, tabId: string) => void;
+  setMode: (windowId: string, tabId: string, mode: BrowserTabMode) => void;
   removeWindow: (windowId: string) => void;
   hydrate: (byWindow: Record<string, BrowserWindowState>) => void;
 }
@@ -30,6 +32,8 @@ function makeTab(address = ""): BrowserTab {
     title: address ? address : "Nouvel onglet",
     address,
     src: url ? viewSrc(url) : null,
+    mode: "text",
+    navSeq: 0,
   };
 }
 
@@ -85,9 +89,42 @@ export const useBrowserStore = create<BrowserStoreState>((set, get) => ({
     set((s) => {
       const win = s.byWindow[windowId];
       if (!win) return s;
-      const tabs = win.tabs.map((t) =>
-        t.id === tabId ? { ...t, address: addressInput, title: addressInput, src: viewSrc(url) } : t
-      );
+      const tabs = win.tabs.map((t) => {
+        if (t.id !== tabId) return t;
+        if (t.mode === "full") {
+          // The remote-control view is watching navSeq to know when to send
+          // a fresh navigation over its already-open WebSocket.
+          return { ...t, address: addressInput, title: addressInput, navSeq: t.navSeq + 1 };
+        }
+        // Cache-bust so clicking the same bookmark/link twice (or re-typing
+        // the same address) always reloads the iframe: an identical `src`
+        // string is a no-op for React/the DOM, which otherwise looked like
+        // "nothing happens" when navigating back to the current page.
+        return { ...t, address: addressInput, title: addressInput, src: viewSrc(url, Date.now()) };
+      });
+      return { byWindow: { ...s.byWindow, [windowId]: { ...win, tabs } } };
+    });
+  },
+
+  reload: (windowId, tabId) => {
+    set((s) => {
+      const win = s.byWindow[windowId];
+      if (!win) return s;
+      const tabs = win.tabs.map((t) => {
+        if (t.id !== tabId || !t.address) return t;
+        if (t.mode === "full") return { ...t, navSeq: t.navSeq + 1 };
+        const url = normalizeUrl(t.address);
+        return url ? { ...t, src: viewSrc(url, Date.now()) } : t;
+      });
+      return { byWindow: { ...s.byWindow, [windowId]: { ...win, tabs } } };
+    });
+  },
+
+  setMode: (windowId, tabId, mode) => {
+    set((s) => {
+      const win = s.byWindow[windowId];
+      if (!win) return s;
+      const tabs = win.tabs.map((t) => (t.id === tabId ? { ...t, mode } : t));
       return { byWindow: { ...s.byWindow, [windowId]: { ...win, tabs } } };
     });
   },

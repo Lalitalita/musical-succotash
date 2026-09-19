@@ -5,6 +5,7 @@ export function normalizeUrl(input: string): string {
   return `https://${trimmed}`;
 }
 
-export function viewSrc(url: string): string {
-  return `/api/browser/view?url=${encodeURIComponent(url)}`;
+export function viewSrc(url: string, cacheBust?: number): string {
+  const base = `/api/browser/view?url=${encodeURIComponent(url)}`;
+  return cacheBust ? `${base}&_r=${cacheBust}` : base;
 }

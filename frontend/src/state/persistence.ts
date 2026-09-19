@@ -1,13 +1,15 @@
 import { api, ApiError } from "../api/client";
-import { DEFAULT_SETTINGS, type DesktopSettings, type WindowInstance } from "../types";
+import { DEFAULT_SETTINGS, type BrowserTab, type DesktopItem, type DesktopSettings, type WindowInstance } from "../types";
 import { useBrowserStore } from "./browserStore";
+import { useDesktopItemsStore } from "./desktopItemsStore";
 import { useSettingsStore } from "./settingsStore";
 import { useWindowStore } from "./windowStore";
 
 interface DesktopBlob {
   windows: WindowInstance[];
-  browserTabs: Record<string, { tabs: { id: string; title: string; address: string; src: string | null }[]; activeTabId: string }>;
+  browserTabs: Record<string, { tabs: BrowserTab[]; activeTabId: string }>;
   settings: DesktopSettings;
+  desktopItems: DesktopItem[];
 }
 
 export function collectDesktopState(): DesktopBlob {
@@ -25,6 +27,7 @@ export function collectDesktopState(): DesktopBlob {
       mailUrl: useSettingsStore.getState().mailUrl,
       calendarUrl: useSettingsStore.getState().calendarUrl,
     },
+    desktopItems: useDesktopItemsStore.getState().items,
   };
 }
 
@@ -49,6 +52,9 @@ export async function restoreDesktopState(): Promise<void> {
     }
     if (state.settings) {
       useSettingsStore.getState().hydrate({ ...DEFAULT_SETTINGS, ...state.settings });
+    }
+    if (Array.isArray(state.desktopItems)) {
+      useDesktopItemsStore.getState().hydrate(state.desktopItems);
     }
   } catch (e) {
     if (!(e instanceof ApiError)) throw e;

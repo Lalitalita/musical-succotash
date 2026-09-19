@@ -108,3 +108,61 @@ class DesktopStateOut(BaseModel):
 
 class DesktopStateIn(BaseModel):
     state: dict
+
+
+class EventCreate(BaseModel):
+    title: str = Field(min_length=1, max_length=200)
+    start_at: datetime
+    end_at: Optional[datetime] = None
+
+
+class EventUpdate(BaseModel):
+    title: Optional[str] = Field(default=None, max_length=200)
+    start_at: Optional[datetime] = None
+    end_at: Optional[datetime] = None
+
+
+class EventOut(BaseModel):
+    id: str
+    title: str
+    start_at: datetime
+    end_at: Optional[datetime]
+
+    class Config:
+        from_attributes = True
+
+
+class AdminUserCreate(BaseModel):
+    username: str = Field(min_length=1, max_length=64)
+    email: str = Field(min_length=1, max_length=255)
+    password: Optional[str] = Field(default=None, min_length=8, max_length=256)
+    is_admin: bool = False
+
+
+class AdminUserUpdate(BaseModel):
+    email: Optional[str] = Field(default=None, max_length=255)
+    is_admin: Optional[bool] = None
+    password: Optional[str] = Field(default=None, min_length=8, max_length=256)
+    reset_totp: bool = False
+
+
+class AdminUserOut(BaseModel):
+    id: str
+    username: str
+    email: str
+    is_admin: bool
+    display_name: Optional[str]
+    avatar_url: Optional[str]
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class AdminUserCreatedOut(BaseModel):
+    user: AdminUserOut
+    generated_password: Optional[str] = None
+    # Only populated right after creation, or after an explicit TOTP reset -
+    # never re-shown to the admin on a routine edit.
+    totp_secret: Optional[str] = None
+    totp_uri: Optional[str] = None

@@ -9,6 +9,8 @@ import ipaddress
 import socket
 from urllib.parse import urlparse
 
+from app.config import get_settings
+
 ALLOWED_SCHEMES = {"http", "https"}
 
 
@@ -30,7 +32,14 @@ def _is_blocked_ip(ip_str: str) -> bool:
 
 def validate_url(url: str) -> str:
     """Raise UnsafeUrlError if the URL is malformed or resolves to a
-    non-public address. Returns the normalized URL on success."""
+    non-public address. Returns the normalized URL on success.
+
+    Exception: hostnames on `INTERNAL_PROXY_ALLOWLIST` (first-party services
+    we ourselves deployed on the internal Docker network, e.g. "roundcube")
+    are allowed straight through even though they resolve to a private IP.
+    User-supplied URLs can never reach this allowlist by accident since it
+    only matches an exact hostname the admin configured.
+    """
     parsed = urlparse(url)
     if parsed.scheme not in ALLOWED_SCHEMES:
         raise UnsafeUrlError("Only http/https URLs are allowed.")
@@ -38,6 +47,9 @@ def validate_url(url: str) -> str:
         raise UnsafeUrlError("Missing hostname.")
     if parsed.username or parsed.password:
         raise UnsafeUrlError("Credentials in URL are not allowed.")
+
+    if parsed.hostname.lower() in get_settings().internal_proxy_allowlist_set:
+        return url
 
     try:
         infos = socket.getaddrinfo(parsed.hostname, None)

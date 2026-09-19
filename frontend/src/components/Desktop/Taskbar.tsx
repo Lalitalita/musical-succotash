@@ -16,6 +16,7 @@ const APP_ICONS: Record<AppId, string> = {
   "security-dashboard": "🛡️",
   settings: "⚙️",
   about: "ℹ️",
+  files: "📁",
 };
 
 export function Taskbar({ onToggleStart, startOpen, onToggleClock, clockOpen }: Props) {
@@ -23,7 +24,9 @@ export function Taskbar({ onToggleStart, startOpen, onToggleClock, clockOpen }: 
   const [now, setNow] = useState(new Date());
 
   useEffect(() => {
-    const t = setInterval(() => setNow(new Date()), 1000 * 30);
+    // Ticks every second so the clock flyout can show a live HH:MM:SS
+    // clock while it's open; a per-second React state update is cheap.
+    const t = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(t);
   }, []);
 

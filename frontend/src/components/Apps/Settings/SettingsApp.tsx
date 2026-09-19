@@ -3,8 +3,9 @@ import { api } from "../../../api/client";
 import { useAuthStore } from "../../../state/authStore";
 import { useSettingsStore } from "../../../state/settingsStore";
 import { useWindowStore } from "../../../state/windowStore";
+import { UsersPanel } from "./UsersPanel";
 
-type Tab = "compte" | "bureau" | "applications" | "systeme";
+type Tab = "compte" | "bureau" | "applications" | "utilisateurs" | "systeme";
 
 const WALLPAPERS = [
   { id: "default", label: "Aurore", css: "linear-gradient(160deg, #0f2027, #203a43 55%, #2c5364)" },
@@ -56,6 +57,7 @@ export function SettingsApp() {
             ["compte", "Compte"],
             ["bureau", "Bureau"],
             ["applications", "Applications"],
+            ...(me?.is_admin ? ([["utilisateurs", "Utilisateurs"]] as [Tab, string][]) : []),
             ["systeme", "Système"],
           ] as [Tab, string][]
         ).map(([id, label]) => (
@@ -155,6 +157,8 @@ export function SettingsApp() {
             />
           </div>
         )}
+
+        {tab === "utilisateurs" && me?.is_admin && <UsersPanel />}
 
         {tab === "systeme" && (
           <div>

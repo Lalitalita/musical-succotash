@@ -58,7 +58,21 @@ class Settings(BaseSettings):
     # --- Browser proxy ---
     browser_proxy_timeout_seconds: int = 12
     browser_proxy_max_bytes: int = 3 * 1024 * 1024
+    # Safety cap on a single streamed asset (images/video/audio/fonts), well
+    # above any real file so it only ever bites a pathological response.
+    browser_proxy_max_stream_bytes: int = 1024 * 1024 * 1024
     browser_proxy_user_agent: str = "Mozilla/5.0 (X11; Linux x86_64) WebDesktopTextProxy/1.0"
+    # Hostnames the SSRF guard allows even though they resolve to a private
+    # IP - for first-party services we ourselves deployed on the internal
+    # network (e.g. "roundcube"), never for arbitrary user-supplied URLs.
+    internal_proxy_allowlist: str = "roundcube"
+
+    # --- Full-browser mode (Playwright), opt-in per tab ---
+    full_browser_enabled: bool = True
+    full_browser_max_sessions: int = 3
+    full_browser_idle_timeout_seconds: int = 300
+    full_browser_max_lifetime_seconds: int = 3600
+    full_browser_frame_interval_ms: int = 350
 
     # --- Bootstrap admin (first run only, ignored if any user exists) ---
     bootstrap_admin_username: str = "admin"
@@ -68,6 +82,17 @@ class Settings(BaseSettings):
     # --- CORS (only relevant if frontend is served from a different origin) ---
     cors_allowed_origins: str = ""
 
+    # --- File explorer: local per-user storage ---
+    local_files_root: str = "/app/userfiles"
+
+    # --- File explorer: SMB share (single shared household NAS share) ---
+    smb_host: str = ""
+    smb_port: int = 445
+    smb_share: str = ""
+    smb_username: str = ""
+    smb_password: str = ""
+    smb_domain: str = ""
+
     @property
     def admin_whitelist_list(self) -> List[str]:
         return [c.strip() for c in self.admin_ip_whitelist.split(",") if c.strip()]
@@ -75,6 +100,10 @@ class Settings(BaseSettings):
     @property
     def cors_origins_list(self) -> List[str]:
         return [c.strip() for c in self.cors_allowed_origins.split(",") if c.strip()]
+
+    @property
+    def internal_proxy_allowlist_set(self) -> set:
+        return {h.strip().lower() for h in self.internal_proxy_allowlist.split(",") if h.strip()}
 
 
 @lru_cache
