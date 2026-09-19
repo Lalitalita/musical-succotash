@@ -28,6 +28,13 @@ class MeResponse(BaseModel):
     username: str
     email: str
     is_admin: bool
+    display_name: Optional[str] = None
+    avatar_url: Optional[str] = None
+
+
+class UpdateProfileRequest(BaseModel):
+    display_name: Optional[str] = Field(default=None, max_length=64)
+    avatar_url: Optional[str] = Field(default=None, max_length=512)
 
 
 class LoginAttemptOut(BaseModel):
@@ -51,7 +58,53 @@ class SecurityStats(BaseModel):
     locked_count: int
     top_countries: list[dict]
     attempts_per_day: list[dict]
+    top_usernames: list[dict]
+    top_ips: list[dict]
+    hourly_distribution: list[dict]
+
+
+class ActiveLockOut(BaseModel):
+    scope: str
+    key: str
+    retry_after_seconds: int
+
+
+class SecurityAlertOut(BaseModel):
+    id: int
+    timestamp: datetime
+    subject: str
+    detail: str
+    username: Optional[str]
+    ip_address: Optional[str]
+
+    class Config:
+        from_attributes = True
 
 
 class BrowserFetchRequest(BaseModel):
     url: str
+
+
+class BookmarkCreate(BaseModel):
+    title: str = Field(min_length=1, max_length=128)
+    url: str = Field(min_length=1, max_length=2048)
+    icon_url: Optional[str] = Field(default=None, max_length=512)
+
+
+class BookmarkOut(BaseModel):
+    id: str
+    title: str
+    url: str
+    icon_url: Optional[str]
+    position: int
+
+    class Config:
+        from_attributes = True
+
+
+class DesktopStateOut(BaseModel):
+    state: dict
+
+
+class DesktopStateIn(BaseModel):
+    state: dict

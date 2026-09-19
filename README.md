@@ -18,20 +18,27 @@ Internet ──HTTPS──▶ Nginx externe (TLS, hors de ce dépôt)
      "public"    │  sert le SPA React   │  (port ${FRONTEND_PORT})
                  └──────────┬───────────┘
                             │ proxy /api/*
-     réseau      ┌──────────▼───────────┐   ┌────────────┐   ┌─────────┐
-     "internal"  │  backend (FastAPI)   │──▶│ PostgreSQL │   │  Redis  │
-     (isolé,     │  auth, MFA leurre,   │──▶│            │   │ rate    │
-      pas de     │  rate limit, geoip,  │   └────────────┘   │ limit   │
-      sortie)    │  proxy navigateur    │──────────────────▶ └─────────┘
+     réseau      ┌──────────▼───────────┐   réseau      ┌────────────┐
+     "internal"  │  backend (FastAPI)   │───"data"─────▶│ PostgreSQL │
+     (égress     │  auth, MFA leurre,   │   (internal:  │  + Redis   │
+      Internet   │  rate limit, geoip,  │    true, pas  │            │
+      OK)        │  proxy navigateur    │──▶ d'égress)  └────────────┘
                  └──────────────────────┘
+                            │ égress Internet (DNS + HTTP sortant)
+                            ▼
+                    sites web demandés par l'app "Navigateur"
 ```
 
 - Le **frontend** est le seul service publié sur le réseau `public` (mappé
   sur `FRONTEND_PORT`, `8080` par défaut). C'est vers ce port que doit
   pointer le reverse-proxy Nginx externe.
-- Le **backend**, **PostgreSQL** et **Redis** vivent uniquement sur le
-  réseau Docker `internal` (`internal: true`, sans passerelle vers
-  l'extérieur) et ne publient aucun port sur l'hôte.
+- Le **backend** vit sur le réseau `internal` (bridge Docker classique) : il
+  n'est **jamais** exposé sur un port de l'hôte, mais garde un accès sortant
+  à Internet (DNS + HTTP), indispensable pour que l'app "Navigateur" puisse
+  aller chercher les pages demandées.
+- **PostgreSQL** et **Redis** vivent sur un second réseau `data`
+  (`internal: true`, sans passerelle du tout) : ils ne parlent qu'au backend
+  et n'ont besoin d'aucun accès sortant.
 - Les endpoints `/api/admin/security/*` (dashboard) ne répondent que si
   l'adresse IP réelle du client (reconstituée depuis la chaîne
   `X-Forwarded-For`, voir `TRUSTED_PROXY_HOPS`) appartient à un réseau privé
@@ -108,6 +115,34 @@ URL au backend (`GET /api/browser/view?url=...`), qui :
 Les assets (CSS/images/fonts) transitent par `GET /api/browser/asset` avec
 la même protection SSRF et une limite de taille (`BROWSER_PROXY_MAX_BYTES`).
 
+La fenêtre Navigateur gère plusieurs onglets indépendants (chacun garde son
+HTML chargé quand on change d'onglet) et une barre de favoris personnels
+(`/api/bookmarks`, avec icône personnalisable par URL d'image).
+
+## Session persistante du bureau
+
+À chaque déconnexion (et toutes les 45s en tâche de fond), l'état du bureau
+est sauvegardé côté serveur par utilisateur (`PUT /api/desktop/state`) :
+fenêtres ouvertes, position/taille, onglets du navigateur et leurs adresses,
+fond d'écran et couleur d'accent. À la reconnexion (`GET /api/desktop/state`),
+tout est restauré à l'identique.
+
+## Bureau et compte
+
+- **Volet horloge** : cliquer sur l'heure dans la barre des tâches ouvre un
+  mini calendrier du mois en cours, plus des raccourcis "Messagerie" /
+  "Calendrier" vers les URL configurées dans Paramètres → Applications
+  (par ex. un webmail Roundcube/Rainloop auto-hébergé), ouverts via le
+  navigateur texte sécurisé.
+- **Menu Démarrer → Paramètres** : onglets Compte (nom affiché, photo de
+  profil uploadée via `POST /api/uploads`), Bureau (fond d'écran, couleur
+  d'accent), Applications (URLs webmail/calendrier) et Système (état de
+  l'API, accès rapide au dashboard sécurité pour les admins).
+- **Clic droit personnalisé** : bureau (actualiser, nouvelle fenêtre
+  navigateur, personnaliser), barre des tâches (restaurer/fermer une
+  fenêtre), barre de titre des fenêtres (réduire/agrandir/fermer), favoris
+  du navigateur (ouvrir/supprimer).
+
 ## Arborescence
 
 ```
@@ -130,21 +165,27 @@ la même protection SSRF et une limite de taille (`BROWSER_PROXY_MAX_BYTES`).
 │       ├── mailer.py           # Alertes SMTP
 │       ├── deps.py             # IP réelle, garde LAN, session courante
 │       ├── browser_ssrf.py     # Validation anti-SSRF
-│       ├── init_db.py          # Bootstrap admin au premier démarrage
+│       ├── init_db.py          # Bootstrap admin + migrations légères
 │       └── routers/
 │           ├── auth.py
 │           ├── admin.py
-│           └── browser_proxy.py
+│           ├── browser_proxy.py
+│           ├── bookmarks.py
+│           ├── desktop.py      # état de session persistant
+│           └── uploads.py      # avatars / icônes de favoris
 └── frontend/
     ├── Dockerfile               # build Vite -> Nginx
     ├── nginx.conf               # sert le SPA + proxy /api -> backend:8000
     └── src/
         ├── api/client.ts
-        ├── state/{authStore,windowStore}.ts
+        ├── state/
+        │   ├── authStore.ts, windowStore.ts, browserStore.ts
+        │   ├── settingsStore.ts, bookmarksStore.ts, contextMenuStore.ts
+        │   └── persistence.ts      # save/restore de l'état du bureau
         ├── components/
         │   ├── Login/{LoginForm,MfaDecoyForm}.tsx
-        │   └── Desktop/{Desktop,Taskbar,StartMenu,Window,WindowManager}.tsx
-        │   └── Apps/{BrowserApp,SecurityDashboard}/
+        │   ├── Desktop/{Desktop,Taskbar,StartMenu,ClockFlyout,ContextMenu,Window,WindowManager}.tsx
+        │   └── Apps/{BrowserApp,SecurityDashboard,Settings}/
         └── styles/global.css     # thème Windows 11 (acrylique/mica)
 ```
 
@@ -169,3 +210,10 @@ cd frontend && npm install && npm run dev
   contournée ou, à l'inverse, bloquer des IP légitimes.
 - Changez impérativement `SECRET_KEY` et les mots de passe PostgreSQL/SMTP
   dans `.env` avant tout déploiement réel.
+- Le backend a besoin d'un accès Internet sortant (DNS + HTTP) pour l'app
+  Navigateur : ne remettez jamais le réseau `internal` en `internal: true`
+  sans garder un second réseau dédié pour la base de données/Redis, sous
+  peine de retomber sur `Temporary failure in name resolution`.
+- Les avatars et icônes de favoris uploadés sont stockés dans le volume
+  `backend-uploads` (`/app/uploads`), séparé du reste pour survivre aux
+  reconstructions d'image.

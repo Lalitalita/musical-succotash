@@ -1,4 +1,5 @@
 import { PointerEvent, ReactNode, useRef, useState } from "react";
+import { openContextMenu } from "../../state/contextMenuStore";
 import { useWindowStore } from "../../state/windowStore";
 import type { WindowInstance } from "../../types";
 
@@ -76,6 +77,13 @@ export function Window({ win, children }: Props) {
         onPointerMove={onTitlePointerMove}
         onPointerUp={onTitlePointerUp}
         onDoubleClick={() => toggleMaximize(win.id)}
+        onContextMenu={(e) =>
+          openContextMenu(e, [
+            { label: "Réduire", icon: "—", onSelect: () => toggleMinimize(win.id) },
+            { label: win.maximized ? "Restaurer" : "Agrandir", icon: "▢", onSelect: () => toggleMaximize(win.id) },
+            { label: "Fermer", icon: "✕", danger: true, separatorBefore: true, onSelect: () => closeWindow(win.id) },
+          ])
+        }
       >
         <span className="window-title">{win.title}</span>
         <div className="window-controls">

@@ -7,6 +7,8 @@ container logs -- this is the only place it is ever shown.
 import logging
 import secrets
 
+from sqlalchemy import inspect, text
+
 from app.config import get_settings
 from app.database import Base, SessionLocal, engine
 from app.models import User
@@ -15,9 +17,34 @@ from app.security import hash_password, new_totp_secret, totp_provisioning_uri
 logger = logging.getLogger("webdesktop.init_db")
 settings = get_settings()
 
+# Columns added to the `users` table after its first release. create_all()
+# only creates brand-new tables, so on an already-deployed database these
+# need an explicit, idempotent ALTER TABLE to show up.
+_USER_TABLE_ADDITIONS = {
+    "display_name": "VARCHAR(64)",
+    "avatar_url": "VARCHAR(512)",
+}
+
+
+def _apply_lightweight_migrations() -> None:
+    inspector = inspect(engine)
+    if "users" not in inspector.get_table_names():
+        return  # brand new database, create_all() already made the final shape
+
+    existing = {col["name"] for col in inspector.get_columns("users")}
+    missing = {name: ddl for name, ddl in _USER_TABLE_ADDITIONS.items() if name not in existing}
+    if not missing:
+        return
+
+    with engine.begin() as conn:
+        for name, ddl in missing.items():
+            conn.execute(text(f"ALTER TABLE users ADD COLUMN {name} {ddl}"))
+    logger.info("Applied lightweight migration: added columns %s to users", list(missing))
+
 
 def init_db() -> None:
     Base.metadata.create_all(bind=engine)
+    _apply_lightweight_migrations()
 
     db = SessionLocal()
     try:
