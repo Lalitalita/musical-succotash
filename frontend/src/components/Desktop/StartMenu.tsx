@@ -12,7 +12,6 @@ const APPS: { id: AppId; title: string; icon: string; adminOnly?: boolean }[] = 
   { id: "files", title: "Explorateur de fichiers", icon: "📁" },
   { id: "security-dashboard", title: "Sécurité", icon: "🛡️", adminOnly: true },
   { id: "settings", title: "Paramètres", icon: "⚙️" },
-  { id: "about", title: "À propos", icon: "ℹ️" },
 ];
 
 export function StartMenu({ onClose }: Props) {

@@ -144,8 +144,15 @@ piloté côté serveur (`backend/app/full_browser.py`) :
   d'inactivité ou `FULL_BROWSER_MAX_LIFETIME_SECONDS` au total.
 - **Compromis assumé** : nettement plus lourd en bande passante/CPU qu'un
   chargement HTML classique - c'est un mode d'appoint, pas le comportement
-  par défaut. `FULL_BROWSER_ENABLED=false` le désactive entièrement (et évite
-  de lancer Chromium au démarrage).
+  par défaut. `FULL_BROWSER_ENABLED=false` le désactive entièrement.
+  Chromium ne démarre pas au lancement du backend : il n'est lancé qu'à la
+  toute première utilisation du mode complet, pour ne rien coûter tant que
+  personne n'y touche. Le rythme de rafraîchissement s'adapte aussi :
+  `FULL_BROWSER_FRAME_INTERVAL_MS` (350ms par défaut) juste après une
+  interaction, puis `FULL_BROWSER_IDLE_FRAME_INTERVAL_MS` (2s) au bout de
+  `FULL_BROWSER_ACTIVE_WINDOW_SECONDS` sans rien faire - un onglet en mode
+  complet ouvert mais inactif ne doit pas monopoliser le CPU/la bande
+  passante en continu.
 
 ## Session persistante du bureau
 
@@ -164,8 +171,14 @@ tout est restauré à l'identique.
   navigateur texte sécurisé.
 - **Menu Démarrer → Paramètres** : onglets Compte (nom affiché, photo de
   profil uploadée via `POST /api/uploads`), Bureau (fond d'écran, couleur
-  d'accent), Applications (URLs webmail/calendrier) et Système (état de
-  l'API, accès rapide au dashboard sécurité pour les admins).
+  d'accent), Applications (URLs webmail/calendrier), Utilisateurs
+  (admin uniquement), Système (état de l'API, accès rapide au dashboard
+  sécurité pour les admins) et **À propos** (pas d'app dédiée pour ça :
+  description de l'appli + génération d'un rapport de diagnostic -
+  infos sur l'appareil, état complet du bureau (fenêtres/onglets/
+  paramètres) et description du problème, téléchargeable en `.txt` ou
+  envoyé par email via le SMTP déjà configuré pour les alertes de
+  sécurité). Pratique à joindre quand vous me signalez un bug.
 - **Clic droit personnalisé** : bureau (actualiser, nouvelle fenêtre
   navigateur, nouveau raccourci, personnaliser), barre des tâches
   (restaurer/fermer une fenêtre), barre de titre des fenêtres
@@ -284,6 +297,32 @@ uvicorn app.main:app --reload
 
 # Frontend (proxy /api vers localhost:8000, voir vite.config.ts)
 cd frontend && npm install && npm run dev
+```
+
+## Débloquer un compte/une IP verrouillé(e)
+
+Le dashboard de sécurité ne peut pas aider ici puisqu'il faut déjà être
+connecté en admin pour y accéder. En cas de verrouillage (vous y compris),
+une petite CLI agit directement sur Redis, à lancer dans le conteneur :
+
+```bash
+# Voir les blocages actifs (et, si besoin, les écrire dans un fichier à consulter/emporter)
+docker compose exec backend python -m app.cli locks
+docker compose exec backend python -m app.cli locks --write /app/locked_accounts.txt
+docker compose exec backend cat /app/locked_accounts.txt   # si vous avez utilisé --write
+
+# Débloquer une IP ou un compte précis
+docker compose exec backend python -m app.cli unlock ip 203.0.113.5
+docker compose exec backend python -m app.cli unlock user admin
+
+# Ou tout débloquer d'un coup (IP + comptes + fenêtres de limitation)
+docker compose exec backend python -m app.cli unlock-all
+```
+
+Solution de secours encore plus directe (vide tout Redis, sans distinction) :
+
+```bash
+docker compose exec redis redis-cli FLUSHALL
 ```
 
 ## Notes de sécurité

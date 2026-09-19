@@ -97,3 +97,23 @@ def list_active_locks() -> list[dict]:
         _, scope, key = raw_key.split(":", 2)
         locks.append({"scope": scope, "key": key, "retry_after_seconds": ttl})
     return sorted(locks, key=lambda l: -l["retry_after_seconds"])
+
+
+def unlock(prefix: str, key: str) -> bool:
+    """Clear every lock/failure-count/rate-window key for one scope+key
+    (e.g. prefix="ip", key="203.0.113.5"). Returns True if anything was
+    actually removed. Used by `python -m app.cli unlock` when someone is
+    locked out and can't reach the (login-gated) security dashboard."""
+    deleted = _redis.delete(_lock_key(prefix, key), _fail_count_key(prefix, key), _window_key(prefix, key))
+    return deleted > 0
+
+
+def unlock_all() -> int:
+    """Clear every lock/failure/rate-window key in use by this app.
+    Returns how many keys were removed."""
+    total = 0
+    for pattern in ("lock:*", "fails:*", "rl:*"):
+        keys = list(_redis.scan_iter(match=pattern, count=200))
+        if keys:
+            total += _redis.delete(*keys)
+    return total

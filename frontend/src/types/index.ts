@@ -6,7 +6,7 @@ export interface Me {
   avatar_url: string | null;
 }
 
-export type AppId = "browser" | "security-dashboard" | "about" | "settings" | "files";
+export type AppId = "browser" | "security-dashboard" | "settings" | "files";
 
 export interface WindowInstance {
   id: string;

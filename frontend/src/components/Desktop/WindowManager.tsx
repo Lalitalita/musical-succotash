@@ -5,16 +5,6 @@ import { SecurityDashboard } from "../Apps/SecurityDashboard/SecurityDashboard";
 import { SettingsApp } from "../Apps/Settings/SettingsApp";
 import { Window } from "./Window";
 
-function AboutApp() {
-  return (
-    <div style={{ padding: 20, fontSize: 13, lineHeight: 1.6 }}>
-      <h3>WebDesktop</h3>
-      <p>Bureau virtuel exécuté entièrement dans le navigateur, servi par un backend conteneurisé.</p>
-      <p>Authentification Argon2id + double facteur, proxy de navigation texte sans flux vidéo.</p>
-    </div>
-  );
-}
-
 export function WindowManager() {
   const windows = useWindowStore((s) => s.windows);
 
@@ -26,7 +16,6 @@ export function WindowManager() {
           {win.appId === "security-dashboard" && <SecurityDashboard />}
           {win.appId === "settings" && <SettingsApp />}
           {win.appId === "files" && <FileExplorerApp />}
-          {win.appId === "about" && <AboutApp />}
         </Window>
       ))}
     </>

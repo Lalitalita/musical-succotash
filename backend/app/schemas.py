@@ -166,3 +166,14 @@ class AdminUserCreatedOut(BaseModel):
     # never re-shown to the admin on a routine edit.
     totp_secret: Optional[str] = None
     totp_uri: Optional[str] = None
+
+
+class DiagnosticReportRequest(BaseModel):
+    description: str = Field(default="", max_length=5000)
+    client_info: dict = Field(default_factory=dict)
+    desktop_state: dict = Field(default_factory=dict)
+
+
+class DiagnosticReportResponse(BaseModel):
+    sent: bool
+    report_text: str

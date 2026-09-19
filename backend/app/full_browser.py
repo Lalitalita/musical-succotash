@@ -59,12 +59,33 @@ class FullBrowserManager:
         if not settings.full_browser_enabled:
             logger.info("Full-browser mode disabled (FULL_BROWSER_ENABLED=false)")
             return
+        # Chromium itself is launched lazily, on first actual use (see
+        # _ensure_browser): most deployments/sessions never touch full
+        # mode at all, and eagerly starting a headless Chromium process for
+        # every backend start is a needless permanent memory/CPU cost on a
+        # small host.
+        self._cleanup_task = asyncio.create_task(self._cleanup_loop())
+        logger.info("Full-browser mode available (Chromium launches on first use)")
+
+    async def _ensure_browser(self) -> Browser:
+        if self._browser:
+            return self._browser
         self._playwright = await async_playwright().start()
         self._browser = await self._playwright.chromium.launch(
-            args=["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"]
+            args=[
+                "--no-sandbox",
+                "--disable-dev-shm-usage",
+                "--disable-gpu",
+                "--disable-extensions",
+                "--disable-background-networking",
+                "--disable-background-timer-throttling",
+                "--disable-backgrounding-occluded-windows",
+                "--disable-renderer-backgrounding",
+                "--mute-audio",
+            ]
         )
-        self._cleanup_task = asyncio.create_task(self._cleanup_loop())
-        logger.info("Full-browser mode ready (Chromium launched)")
+        logger.info("Full-browser mode: Chromium launched on first use")
+        return self._browser
 
     async def stop(self) -> None:
         if self._cleanup_task:
@@ -100,7 +121,7 @@ class FullBrowserManager:
         await route.continue_()
 
     async def get_or_create(self, tab_id: str, user_id: str) -> FullBrowserSession:
-        if not settings.full_browser_enabled or not self._browser:
+        if not settings.full_browser_enabled:
             raise RuntimeError("Full-browser mode is not enabled on this server.")
 
         async with self._lock:
@@ -114,7 +135,8 @@ class FullBrowserManager:
             if len(self._sessions) >= settings.full_browser_max_sessions:
                 raise SessionLimitError()
 
-            context = await self._browser.new_context(viewport={"width": 1280, "height": 800})
+            browser = await self._ensure_browser()
+            context = await browser.new_context(viewport={"width": 1280, "height": 800})
             page = await context.new_page()
             await page.route("**/*", self._route_guard)
 

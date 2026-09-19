@@ -5,6 +5,7 @@ client. See app/full_browser.py for the session manager and SSRF guard.
 import asyncio
 import contextlib
 import logging
+import time
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, status
 
@@ -91,6 +92,12 @@ async def full_browser_ws(websocket: WebSocket, tab_id: str, url: str | None = N
         return
 
     page = session.page
+    # Tracks the last time the user actually did something (input or
+    # navigation) so the frame loop can poll fast right after an
+    # interaction and drop back to a slow idle rate otherwise - streaming a
+    # full screenshot every 350ms for a tab nobody is looking at is exactly
+    # the kind of background CPU/bandwidth drain that made things feel slow.
+    last_interaction = time.monotonic()
 
     if url and page.url in ("about:blank", ""):
         try:
@@ -101,7 +108,6 @@ async def full_browser_ws(websocket: WebSocket, tab_id: str, url: str | None = N
     stop_event = asyncio.Event()
 
     async def frame_loop():
-        interval = settings.full_browser_frame_interval_ms / 1000
         while not stop_event.is_set():
             try:
                 data = await page.screenshot(type="jpeg", quality=60)
@@ -109,12 +115,17 @@ async def full_browser_ws(websocket: WebSocket, tab_id: str, url: str | None = N
                 await websocket.send_json({"type": "url", "url": page.url, "title": await page.title()})
             except Exception:  # noqa: BLE001
                 break
-            await asyncio.sleep(interval)
+
+            active = (time.monotonic() - last_interaction) < settings.full_browser_active_window_seconds
+            interval_ms = settings.full_browser_frame_interval_ms if active else settings.full_browser_idle_frame_interval_ms
+            await asyncio.sleep(interval_ms / 1000)
 
     async def receive_loop():
+        nonlocal last_interaction
         while True:
             msg = await websocket.receive_json()
             session.touch()
+            last_interaction = time.monotonic()
             await _apply_input(page, msg)
 
     frame_task = asyncio.create_task(frame_loop())

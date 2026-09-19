@@ -3,9 +3,10 @@ import { api } from "../../../api/client";
 import { useAuthStore } from "../../../state/authStore";
 import { useSettingsStore } from "../../../state/settingsStore";
 import { useWindowStore } from "../../../state/windowStore";
+import { AboutPanel } from "./AboutPanel";
 import { UsersPanel } from "./UsersPanel";
 
-type Tab = "compte" | "bureau" | "applications" | "utilisateurs" | "systeme";
+type Tab = "compte" | "bureau" | "applications" | "utilisateurs" | "systeme" | "apropos";
 
 const WALLPAPERS = [
   { id: "default", label: "Aurore", css: "linear-gradient(160deg, #0f2027, #203a43 55%, #2c5364)" },
@@ -59,6 +60,7 @@ export function SettingsApp() {
             ["applications", "Applications"],
             ...(me?.is_admin ? ([["utilisateurs", "Utilisateurs"]] as [Tab, string][]) : []),
             ["systeme", "Système"],
+            ["apropos", "À propos"],
           ] as [Tab, string][]
         ).map(([id, label]) => (
           <button key={id} className={`settings-tab ${tab === id ? "active" : ""}`} onClick={() => setTab(id)}>
@@ -159,6 +161,8 @@ export function SettingsApp() {
         )}
 
         {tab === "utilisateurs" && me?.is_admin && <UsersPanel />}
+
+        {tab === "apropos" && <AboutPanel />}
 
         {tab === "systeme" && (
           <div>

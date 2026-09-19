@@ -43,7 +43,12 @@ export function FileExplorerApp() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const path = paths[source];
-  const base = `/api/files/${source}`;
+  // `api.get/post/del/upload` already prefix calls with "/api" (see
+  // src/api/client.ts) - `base` must NOT repeat it, or every request 404s
+  // on "/api/api/...". `directBase` is only for window.open(), which needs
+  // the real path since it bypasses the api client entirely.
+  const base = `/files/${source}`;
+  const directBase = `/api/files/${source}`;
 
   const load = useCallback(() => {
     setLoading(true);
@@ -90,7 +95,7 @@ export function FileExplorerApp() {
 
   function downloadEntry(entry: FileEntry) {
     const full = joinPath(path, entry.name);
-    window.open(`${base}/download?path=${encodeURIComponent(full)}`, "_blank");
+    window.open(`${directBase}/download?path=${encodeURIComponent(full)}`, "_blank");
     setContextMenu(null);
   }
 

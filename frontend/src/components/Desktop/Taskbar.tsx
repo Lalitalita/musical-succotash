@@ -15,7 +15,6 @@ const APP_ICONS: Record<AppId, string> = {
   browser: "🌐",
   "security-dashboard": "🛡️",
   settings: "⚙️",
-  about: "ℹ️",
   files: "📁",
 };
 

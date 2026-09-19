@@ -23,7 +23,6 @@ const APP_TITLES: Record<AppId, string> = {
   browser: "Navigateur",
   "security-dashboard": "Sécurité",
   settings: "Paramètres",
-  about: "À propos",
   files: "Explorateur de fichiers",
 };
 

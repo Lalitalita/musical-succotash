@@ -29,6 +29,21 @@ router = APIRouter(prefix="/api/browser", tags=["browser"])
 settings = get_settings()
 logger = logging.getLogger("webdesktop.browser")
 
+# A single shared, connection-pooling client instead of a fresh
+# httpx.Client() per request: a typical page pulls in a dozen+ small assets,
+# and opening a brand new TCP+TLS connection for every single one of them
+# (the old behaviour) is the main reason browsing felt slow - keep-alive
+# connection reuse cuts that handshake cost out almost entirely.
+_http_client = httpx.Client(
+    follow_redirects=False,
+    timeout=settings.browser_proxy_timeout_seconds,
+    limits=httpx.Limits(max_connections=100, max_keepalive_connections=20, keepalive_expiry=30),
+)
+
+
+def close_http_client() -> None:
+    _http_client.close()
+
 _MAX_REDIRECTS = 5
 
 # Reserved query-param names used to carry the real target URL through a
@@ -131,18 +146,17 @@ def _fetch(url: str, method: str = "GET", data: list[tuple[str, str]] | None = N
         if current_body is not None:
             req_headers["Content-Type"] = "application/x-www-form-urlencoded"
 
-        with httpx.Client(follow_redirects=False, timeout=settings.browser_proxy_timeout_seconds) as client:
-            try:
-                resp = client.request(
-                    current_method,
-                    current,
-                    content=current_body,
-                    headers=req_headers,
-                )
-            except httpx.TimeoutException:
-                raise BrowserFetchError(status.HTTP_504_GATEWAY_TIMEOUT, "Le site a mis trop de temps à répondre.")
-            except httpx.HTTPError as exc:
-                raise BrowserFetchError(status.HTTP_502_BAD_GATEWAY, f"La requête vers le site a échoué ({exc}).")
+        try:
+            resp = _http_client.request(
+                current_method,
+                current,
+                content=current_body,
+                headers=req_headers,
+            )
+        except httpx.TimeoutException:
+            raise BrowserFetchError(status.HTTP_504_GATEWAY_TIMEOUT, "Le site a mis trop de temps à répondre.")
+        except httpx.HTTPError as exc:
+            raise BrowserFetchError(status.HTTP_502_BAD_GATEWAY, f"La requête vers le site a échoué ({exc}).")
 
         if resp.is_redirect:
             location = resp.headers.get("location")
@@ -170,13 +184,10 @@ def _resolve_redirect_chain(url: str) -> str:
             raise BrowserFetchError(status.HTTP_400_BAD_REQUEST, str(exc))
 
         try:
-            with httpx.Client(follow_redirects=False, timeout=settings.browser_proxy_timeout_seconds) as client:
-                with client.stream(
-                    "GET", current, headers={"User-Agent": settings.browser_proxy_user_agent}
-                ) as resp:
-                    if not resp.is_redirect:
-                        return current
-                    location = resp.headers.get("location")
+            with _http_client.stream("GET", current, headers={"User-Agent": settings.browser_proxy_user_agent}) as resp:
+                if not resp.is_redirect:
+                    return current
+                location = resp.headers.get("location")
         except httpx.TimeoutException:
             raise BrowserFetchError(status.HTTP_504_GATEWAY_TIMEOUT, "La ressource a mis trop de temps à répondre.")
         except httpx.HTTPError as exc:
@@ -308,18 +319,15 @@ def asset(request: Request, url: str = Query(...), user: User = Depends(get_curr
     if range_header:
         upstream_headers["Range"] = range_header
 
-    client = httpx.Client(timeout=settings.browser_proxy_timeout_seconds)
     try:
-        req = client.build_request("GET", final_url, headers=upstream_headers)
-        upstream = client.send(req, stream=True)
+        req = _http_client.build_request("GET", final_url, headers=upstream_headers)
+        upstream = _http_client.send(req, stream=True)
     except httpx.HTTPError as exc:
-        client.close()
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"La requête vers la ressource a échoué ({exc}).")
 
     content_type = upstream.headers.get("content-type", "application/octet-stream")
     if not any(content_type.startswith(p) for p in _ASSET_CONTENT_TYPES):
         upstream.close()
-        client.close()
         raise HTTPException(status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, "Asset type not allowed through the proxy.")
 
     max_bytes = settings.browser_proxy_max_stream_bytes
@@ -334,7 +342,6 @@ def asset(request: Request, url: str = Query(...), user: User = Depends(get_curr
                 yield chunk
         finally:
             upstream.close()
-            client.close()
 
     passthrough_headers = {"accept-ranges": "bytes"}
     for h in ("content-length", "content-range", "cache-control"):

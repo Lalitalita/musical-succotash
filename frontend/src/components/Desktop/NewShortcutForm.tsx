@@ -11,7 +11,6 @@ const APP_OPTIONS: { id: AppId; label: string; icon: string }[] = [
   { id: "files", label: "Explorateur de fichiers", icon: "📁" },
   { id: "security-dashboard", label: "Sécurité", icon: "🛡️" },
   { id: "settings", label: "Paramètres", icon: "⚙️" },
-  { id: "about", label: "À propos", icon: "ℹ️" },
 ];
 
 export function NewShortcutForm({ onClose }: Props) {

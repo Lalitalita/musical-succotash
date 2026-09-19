@@ -72,7 +72,14 @@ class Settings(BaseSettings):
     full_browser_max_sessions: int = 3
     full_browser_idle_timeout_seconds: int = 300
     full_browser_max_lifetime_seconds: int = 3600
+    # Frame rate while the user is actively interacting (mouse/keyboard/nav
+    # in the last full_browser_active_window_seconds).
     full_browser_frame_interval_ms: int = 350
+    # Much slower frame rate the rest of the time - a screenshot every
+    # 350ms whether anything moved or not is wasted CPU/bandwidth for a tab
+    # just sitting open in the background.
+    full_browser_idle_frame_interval_ms: int = 2000
+    full_browser_active_window_seconds: float = 2.0
 
     # --- Bootstrap admin (first run only, ignored if any user exists) ---
     bootstrap_admin_username: str = "admin"
