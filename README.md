@@ -190,13 +190,21 @@ réinitialiser un TOTP ou supprimer un compte (le dernier compte admin ne
 peut ni être rétrogradé ni supprimé, pour ne jamais se retrouver sans accès
 admin).
 
-## Webmail Roundcube (bundled)
+## Webmail Roundcube (bundled, optionnel)
 
-Un conteneur Roundcube est inclus (`docker-compose.yml`), sur le réseau
-`internal` uniquement - jamais exposé publiquement ni même sur l'hôte. Il se
-connecte à votre boîte mail existante (IMAP/SMTP externe, via
-`ROUNDCUBE_IMAP_HOST`/`ROUNDCUBE_SMTP_HOST` dans `.env`). Le proxy navigateur
-(texte et mode complet) a une exception ciblée à son garde-fou anti-SSRF pour
+Un conteneur Roundcube est inclus mais **désactivé par défaut** (profil
+Docker Compose `roundcube`) : un simple `docker compose up -d --build` ne le
+démarre jamais, donc laisser les variables `ROUNDCUBE_*` vides dans `.env`
+ne bloque rien. Pour l'activer, une fois `ROUNDCUBE_IMAP_HOST` /
+`ROUNDCUBE_SMTP_HOST` / `ROUNDCUBE_DES_KEY` renseignés :
+
+```bash
+docker compose --profile roundcube up -d --build
+```
+
+Il tourne sur le réseau `internal` uniquement - jamais exposé publiquement
+ni même sur l'hôte. Le proxy navigateur (texte et mode complet) a une
+exception ciblée à son garde-fou anti-SSRF pour
 le seul hostname `roundcube` (`INTERNAL_PROXY_ALLOWLIST`), afin qu'il reste
 joignable depuis l'app Navigateur/le volet horloge sans ouvrir l'accès à
 n'importe quelle adresse privée. Configurez l'URL du webmail sur

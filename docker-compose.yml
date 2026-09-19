@@ -139,15 +139,19 @@ services:
       timeout: 5s
       retries: 5
 
-  # Self-hosted webmail. Never exposed publicly or even to the host: only
-  # reachable by "backend" over the "internal" network, and only through
-  # the browser proxy's INTERNAL_PROXY_ALLOWLIST ("roundcube" by default -
-  # see backend/app/browser_ssrf.py). It needs its own outbound internet
-  # access to reach your real IMAP/SMTP server, hence "internal" and not
-  # "data". Point Paramètres → Applications → "URL du webmail" at
-  # http://roundcube once IMAP_HOST/SMTP_HOST below are configured.
+  # Self-hosted webmail. Opt-in: this service only starts with
+  # `docker compose --profile roundcube up -d --build`, never on a plain
+  # `docker compose up -d --build` - so leaving the ROUNDCUBE_* vars empty
+  # in .env is fine and requires no extra action. Never exposed publicly or
+  # even to the host: only reachable by "backend" over the "internal"
+  # network, and only through the browser proxy's INTERNAL_PROXY_ALLOWLIST
+  # ("roundcube" by default - see backend/app/browser_ssrf.py). It needs its
+  # own outbound internet access to reach your real IMAP/SMTP server, hence
+  # "internal" and not "data". Point Paramètres → Applications → "URL du
+  # webmail" at http://roundcube once IMAP_HOST/SMTP_HOST below are set.
   roundcube:
-    image: roundcube/roundcubemail:1.6-apache
+    image: roundcube/roundcubemail:latest
+    profiles: ["roundcube"]
     restart: unless-stopped
     networks:
       - internal

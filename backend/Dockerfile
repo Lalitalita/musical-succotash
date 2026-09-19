@@ -1,4 +1,9 @@
-FROM python:3.12-slim
+# Pinned to bookworm (Debian 12), not the floating "slim" tag: Playwright's
+# `--with-deps` only knows how to map a handful of specific distros to their
+# system package lists (bookworm is one), and breaks on newer ones like
+# trixie (Debian 13) that it doesn't recognize yet - it falls back to a
+# guess that references packages renamed/removed on the real distro.
+FROM python:3.12-slim-bookworm
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
         libxml2 libxslt1.1 curl \
