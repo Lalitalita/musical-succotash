@@ -63,6 +63,24 @@ docker compose logs backend | grep -A8 "FIRST RUN BOOTSTRAP"
 Ajoutez le secret TOTP affiché dans Aegis / Google Authenticator. Aucune
 autre étape manuelle n'est nécessaire.
 
+### Mot de passe admin perdu / non reçu
+
+La banniere de bootstrap ne s'affiche qu'a la toute premiere creation de la
+base (elle est stockee dans le volume Docker `postgres-data`, qui survit a
+un `docker compose down && up -d --build`). Si vous n'avez pas recupere le
+mot de passe a temps, pas besoin de tout reinitialiser :
+
+```bash
+# Dans .env :
+RESET_ADMIN_PASSWORD=true
+
+docker compose up -d --build backend
+docker compose logs backend | grep -A8 "ADMIN PASSWORD RESET"
+
+# Remettre RESET_ADMIN_PASSWORD=false dans .env ensuite, sinon le mot de
+# passe (et le secret TOTP) est regenere a chaque redemarrage du backend.
+```
+
 Configurez ensuite votre reverse-proxy Nginx externe (déjà en place, hors de
 ce dépôt) pour terminer le TLS et faire suivre vers
 `http://<hôte-debian>:${FRONTEND_PORT}` en transmettant

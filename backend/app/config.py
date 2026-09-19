@@ -86,6 +86,11 @@ class Settings(BaseSettings):
     bootstrap_admin_email: str = "admin@webdesktop.local"
     bootstrap_admin_password: str = ""
 
+    # --- Admin password reset (set to true in .env, restart, read the new
+    # password from `docker compose logs backend`, then set back to false -
+    # otherwise the password is regenerated on every restart). ---
+    reset_admin_password: bool = False
+
     # --- CORS (only relevant if frontend is served from a different origin) ---
     cors_allowed_origins: str = ""
 
