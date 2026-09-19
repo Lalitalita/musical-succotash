@@ -1,0 +1,109 @@
+networks:
+  public:
+    driver: bridge
+  internal:
+    driver: bridge
+    internal: true
+
+volumes:
+  postgres-data:
+  redis-data:
+
+services:
+  frontend:
+    build:
+      context: ./frontend
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-8080}:80"
+    networks:
+      - public
+      - internal
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  backend:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    networks:
+      - internal
+    environment:
+      APP_NAME: ${APP_NAME:-WebDesktop}
+      ENVIRONMENT: ${ENVIRONMENT:-production}
+      SECRET_KEY: ${SECRET_KEY}
+      ACCESS_TOKEN_TTL_MINUTES: ${ACCESS_TOKEN_TTL_MINUTES:-720}
+      MFA_PENDING_TTL_MINUTES: ${MFA_PENDING_TTL_MINUTES:-5}
+
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-webdesktop}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-webdesktop}
+      REDIS_URL: redis://redis:6379/0
+
+      TRUSTED_PROXY_HOPS: ${TRUSTED_PROXY_HOPS:-2}
+      ADMIN_IP_WHITELIST: ${ADMIN_IP_WHITELIST:-}
+
+      LOGIN_MAX_ATTEMPTS_PER_WINDOW: ${LOGIN_MAX_ATTEMPTS_PER_WINDOW:-5}
+      LOGIN_WINDOW_SECONDS: ${LOGIN_WINDOW_SECONDS:-300}
+      LOCKOUT_BASE_SECONDS: ${LOCKOUT_BASE_SECONDS:-30}
+      LOCKOUT_MAX_SECONDS: ${LOCKOUT_MAX_SECONDS:-3600}
+      MFA_ALERT_FAILURE_THRESHOLD: ${MFA_ALERT_FAILURE_THRESHOLD:-3}
+
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_USE_TLS: ${SMTP_USE_TLS:-true}
+      SMTP_FROM: ${SMTP_FROM:-alerts@webdesktop.local}
+      SMTP_ALERT_TO: ${SMTP_ALERT_TO:-}
+
+      GEOIP_DB_PATH: /app/geoip/GeoLite2-City.mmdb
+
+      BROWSER_PROXY_TIMEOUT_SECONDS: ${BROWSER_PROXY_TIMEOUT_SECONDS:-12}
+      BROWSER_PROXY_MAX_BYTES: ${BROWSER_PROXY_MAX_BYTES:-3145728}
+
+      BOOTSTRAP_ADMIN_USERNAME: ${BOOTSTRAP_ADMIN_USERNAME:-admin}
+      BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-admin@webdesktop.local}
+      BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-}
+    volumes:
+      - ./backend/geoip:/app/geoip:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fs", "http://localhost:8000/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    networks:
+      - internal
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-webdesktop}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-webdesktop}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-webdesktop}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    networks:
+      - internal
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
