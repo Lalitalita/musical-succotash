@@ -1,0 +1,560 @@
+:root {
+  --accent: #4cc2ff;
+  --accent-strong: #0067c0;
+  --bg-desktop-1: #0f2027;
+  --bg-desktop-2: #203a43;
+  --bg-desktop-3: #2c5364;
+  --surface: rgba(32, 32, 32, 0.72);
+  --surface-solid: #202020;
+  --surface-light: rgba(255, 255, 255, 0.08);
+  --border: rgba(255, 255, 255, 0.12);
+  --text: #f2f2f2;
+  --text-dim: #b7b7b7;
+  --radius: 10px;
+  --taskbar-height: 48px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: "Segoe UI", "Segoe UI Variable", system-ui, -apple-system, sans-serif;
+  color: var(--text);
+  background: var(--bg-desktop-1);
+  overflow: hidden;
+}
+
+button,
+input {
+  font-family: inherit;
+}
+
+/* ---------------- Auth screens ---------------- */
+
+.auth-shell {
+  height: 100vh;
+  width: 100vw;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(circle at 30% 20%, var(--bg-desktop-3), var(--bg-desktop-1) 70%);
+}
+
+.auth-card {
+  width: 360px;
+  padding: 36px 32px;
+  background: var(--surface);
+  backdrop-filter: blur(28px) saturate(160%);
+  -webkit-backdrop-filter: blur(28px) saturate(160%);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
+  text-align: center;
+}
+
+.auth-avatar {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent), var(--accent-strong));
+  margin: 0 auto 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  font-weight: 600;
+}
+
+.auth-card h2 {
+  margin: 0 0 20px;
+  font-weight: 500;
+}
+
+.auth-field {
+  width: 100%;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+  font-size: 14px;
+  letter-spacing: 0.5px;
+  text-align: center;
+}
+
+.auth-field:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.auth-hint {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-bottom: 14px;
+}
+
+.auth-button {
+  width: 100%;
+  padding: 10px;
+  border-radius: 6px;
+  border: none;
+  background: var(--accent-strong);
+  color: white;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.auth-button:hover {
+  background: #0857a3;
+}
+
+.auth-error {
+  color: #ff6b6b;
+  font-size: 13px;
+  margin-bottom: 12px;
+}
+
+/* ---------------- Desktop ---------------- */
+
+.desktop {
+  height: 100vh;
+  width: 100vw;
+  position: relative;
+  background: linear-gradient(160deg, var(--bg-desktop-1), var(--bg-desktop-2) 55%, var(--bg-desktop-3));
+  overflow: hidden;
+}
+
+.desktop-icons {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.desktop-icon {
+  width: 84px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  color: white;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 6px;
+}
+
+.desktop-icon:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.desktop-icon .icon-glyph {
+  font-size: 30px;
+}
+
+.desktop-icon span {
+  font-size: 12px;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
+}
+
+/* ---------------- Taskbar ---------------- */
+
+.taskbar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: var(--taskbar-height);
+  background: rgba(20, 20, 20, 0.65);
+  backdrop-filter: blur(24px) saturate(150%);
+  -webkit-backdrop-filter: blur(24px) saturate(150%);
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 12px;
+  z-index: 9999;
+}
+
+.taskbar-btn {
+  height: 38px;
+  min-width: 38px;
+  padding: 0 10px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-size: 15px;
+}
+
+.taskbar-btn:hover,
+.taskbar-btn.active {
+  background: var(--surface-light);
+}
+
+.taskbar-search {
+  width: 220px;
+  height: 32px;
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--text);
+  padding: 0 14px;
+  font-size: 13px;
+}
+
+.taskbar-clock {
+  position: absolute;
+  right: 14px;
+  font-size: 12px;
+  line-height: 1.3;
+  text-align: right;
+  color: var(--text);
+  padding: 4px 10px;
+  border-radius: 6px;
+}
+
+.taskbar-clock:hover {
+  background: var(--surface-light);
+}
+
+/* ---------------- Start menu ---------------- */
+
+.start-menu {
+  position: absolute;
+  bottom: calc(var(--taskbar-height) + 10px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: 460px;
+  max-height: 520px;
+  background: var(--surface);
+  backdrop-filter: blur(30px) saturate(160%);
+  -webkit-backdrop-filter: blur(30px) saturate(160%);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.5);
+  padding: 24px;
+  z-index: 10000;
+}
+
+.start-menu h4 {
+  margin: 0 0 12px;
+  font-weight: 500;
+  color: var(--text-dim);
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.start-menu-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.start-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 8px;
+  border-radius: 8px;
+  border: none;
+  background: var(--surface-light);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.start-tile:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.start-tile .icon-glyph {
+  font-size: 24px;
+}
+
+.start-menu-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-top: 1px solid var(--border);
+  padding-top: 14px;
+}
+
+.start-user {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+}
+
+.start-user .avatar-mini {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent), var(--accent-strong));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.logout-btn {
+  border: none;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.logout-btn:hover {
+  color: var(--text);
+}
+
+/* ---------------- Windows ---------------- */
+
+.app-window {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  backdrop-filter: blur(26px) saturate(150%);
+  -webkit-backdrop-filter: blur(26px) saturate(150%);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+  min-width: 320px;
+  min-height: 200px;
+}
+
+.app-window.maximized {
+  border-radius: 0;
+}
+
+.window-titlebar {
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 4px 0 12px;
+  background: rgba(255, 255, 255, 0.04);
+  cursor: default;
+  user-select: none;
+  flex-shrink: 0;
+}
+
+.window-titlebar.dragging {
+  cursor: grabbing;
+}
+
+.window-title {
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.window-controls {
+  display: flex;
+}
+
+.window-controls button {
+  width: 42px;
+  height: 36px;
+  border: none;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.window-controls button:hover {
+  background: var(--surface-light);
+  color: var(--text);
+}
+
+.window-controls button.close:hover {
+  background: #e81123;
+  color: white;
+}
+
+.window-body {
+  flex: 1;
+  overflow: auto;
+  background: rgba(12, 12, 12, 0.35);
+  position: relative;
+}
+
+.resize-handle {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 16px;
+  height: 16px;
+  cursor: nwse-resize;
+}
+
+/* ---------------- Browser app ---------------- */
+
+.browser-app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.browser-toolbar {
+  display: flex;
+  gap: 8px;
+  padding: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  flex-shrink: 0;
+}
+
+.browser-toolbar input {
+  flex: 1;
+  padding: 6px 10px;
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+  font-size: 13px;
+}
+
+.browser-toolbar button {
+  padding: 6px 14px;
+  border-radius: 16px;
+  border: none;
+  background: var(--accent-strong);
+  color: white;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.browser-frame-wrap {
+  flex: 1;
+  background: white;
+}
+
+.browser-frame-wrap iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+}
+
+.browser-status {
+  padding: 4px 10px;
+  font-size: 11px;
+  color: var(--text-dim);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+/* ---------------- Security dashboard ---------------- */
+
+.dashboard {
+  padding: 16px;
+  overflow-y: auto;
+  height: 100%;
+}
+
+.dashboard-cards {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.stat-card {
+  background: var(--surface-light);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.stat-card .value {
+  font-size: 22px;
+  font-weight: 600;
+}
+
+.stat-card .label {
+  font-size: 11px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+}
+
+.dashboard h4 {
+  color: var(--text-dim);
+  font-size: 13px;
+  text-transform: uppercase;
+  margin: 18px 0 8px;
+}
+
+.bar-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  height: 100px;
+  margin-bottom: 8px;
+}
+
+.bar-chart .bar {
+  flex: 1;
+  background: var(--accent);
+  border-radius: 3px 3px 0 0;
+  min-height: 2px;
+}
+
+table.attempts-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+table.attempts-table th,
+table.attempts-table td {
+  text-align: left;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.status-pill {
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  display: inline-block;
+}
+
+.status-pill.ok {
+  background: rgba(60, 200, 100, 0.2);
+  color: #6fe08a;
+}
+
+.status-pill.fail {
+  background: rgba(232, 17, 35, 0.2);
+  color: #ff8a8a;
+}
+
+.status-pill.warn {
+  background: rgba(255, 185, 0, 0.2);
+  color: #ffcf6b;
+}
