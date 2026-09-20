@@ -1,4 +1,5 @@
 import { FormEvent, useState } from "react";
+import { DEFAULT_APP_ICONS, APP_LABELS } from "../../constants/icons";
 import { useDesktopItemsStore } from "../../state/desktopItemsStore";
 import type { AppId } from "../../types";
 
@@ -6,12 +7,7 @@ interface Props {
   onClose: () => void;
 }
 
-const APP_OPTIONS: { id: AppId; label: string; icon: string }[] = [
-  { id: "browser", label: "Navigateur", icon: "🌐" },
-  { id: "files", label: "Explorateur de fichiers", icon: "📁" },
-  { id: "security-dashboard", label: "Sécurité", icon: "🛡️" },
-  { id: "settings", label: "Paramètres", icon: "⚙️" },
-];
+const APP_IDS: AppId[] = ["browser", "files", "security-dashboard", "settings"];
 
 export function NewShortcutForm({ onClose }: Props) {
   const { add } = useDesktopItemsStore();
@@ -27,8 +23,7 @@ export function NewShortcutForm({ onClose }: Props) {
       if (!url.trim()) return;
       add({ kind: "url", label: label.trim() || url.trim(), url: url.trim(), icon });
     } else {
-      const option = APP_OPTIONS.find((o) => o.id === appId)!;
-      add({ kind: "app", label: label.trim() || option.label, appId, icon: option.icon });
+      add({ kind: "app", label: label.trim() || APP_LABELS[appId], appId, icon: DEFAULT_APP_ICONS[appId] });
     }
     onClose();
   }
@@ -64,9 +59,9 @@ export function NewShortcutForm({ onClose }: Props) {
           <>
             <label className="settings-label">Application</label>
             <select className="settings-input" value={appId} onChange={(e) => setAppId(e.target.value as AppId)}>
-              {APP_OPTIONS.map((o) => (
-                <option key={o.id} value={o.id}>
-                  {o.icon} {o.label}
+              {APP_IDS.map((id) => (
+                <option key={id} value={id}>
+                  {DEFAULT_APP_ICONS[id]} {APP_LABELS[id]}
                 </option>
               ))}
             </select>

@@ -149,8 +149,16 @@ par URL d'image).
 Le mode texte n'exécute jamais de JavaScript : les sites qui en ont besoin
 pour s'afficher (SPA modernes type Instagram, webmail avec skin JS...)
 resteront cassés ou illisibles. Pour ces cas, chaque onglet a un bouton
-**Mode texte / Mode complet** qui bascule vers un vrai onglet Chromium headless
-piloté côté serveur (`backend/app/full_browser.py`) :
+**Mode texte / Mode complet** qui bascule vers un vrai onglet Chromium piloté
+côté serveur (`backend/app/full_browser.py`) :
+
+- Chromium tourne en mode **normal** (pas headless), rendu dans un
+  framebuffer virtuel (`Xvfb`, démarré par l'entrée du conteneur backend -
+  voir `xvfb-run` dans `backend/Dockerfile`) : rien n'est jamais réellement
+  affiché nulle part, mais plusieurs sites (Google en tête) détectent et
+  bloquent activement Chromium headless ("this browser may not be secure"),
+  et tourner en mode normal referme cet écart en plus des correctifs déjà
+  posés (user-agent standard, `navigator.webdriver` masqué).
 
 - Le rendu est diffusé au navigateur via WebSocket (`/api/browser/full/ws`)
   en utilisant le screencast natif du protocole Chrome DevTools
@@ -204,18 +212,28 @@ bloqué dans un état bizarre.
 - **Volet horloge** : cliquer sur l'heure dans la barre des tâches ouvre un
   mini calendrier du mois en cours, plus des raccourcis "Messagerie" /
   "Calendrier" vers les URL configurées dans Paramètres → Applications
-  (par ex. un webmail Roundcube/Rainloop auto-hébergé), ouverts via le
-  navigateur texte sécurisé.
+  (par ex. le SnappyMail bundled), ouverts via le navigateur sécurisé.
 - **Menu Démarrer → Paramètres** : onglets Compte (nom affiché, photo de
   profil uploadée via `POST /api/uploads`), Bureau (fond d'écran, couleur
-  d'accent), Applications (URLs webmail/calendrier), Utilisateurs
-  (admin uniquement), Système (état de l'API, accès rapide au dashboard
-  sécurité pour les admins) et **À propos** (pas d'app dédiée pour ça :
-  description de l'appli + génération d'un rapport de diagnostic -
-  infos sur l'appareil, état complet du bureau (fenêtres/onglets/
-  paramètres) et description du problème, téléchargeable en `.txt` ou
-  envoyé par email via le SMTP déjà configuré pour les alertes de
-  sécurité). Pratique à joindre quand vous me signalez un bug.
+  d'accent - qui teinte aussi les boutons du navigateur, pas juste la
+  barre des tâches), **Applications** (liste façon Paramètres Windows :
+  cliquer une app affiche ses réglages - changer son icône depuis la
+  banque d'icônes, plus une section dédiée pour Messagerie/Calendrier
+  (URL) et pour l'Explorateur de fichiers (icône par type de fichier :
+  dossier, PDF, image, vidéo...)), Utilisateurs (admin uniquement),
+  Système (état de l'API, accès rapide au dashboard sécurité pour les
+  admins) et **À propos** (pas d'app dédiée pour ça : description de
+  l'appli + génération d'un rapport de diagnostic - infos sur l'appareil,
+  état complet du bureau (fenêtres/onglets/paramètres) et description du
+  problème, téléchargeable en `.txt` ou envoyé par email via le SMTP déjà
+  configuré pour les alertes de sécurité). Pratique à joindre quand vous
+  me signalez un bug.
+- **Banque d'icônes** : un jeu d'emoji prédéfinis ou une image uploadée,
+  utilisable partout où une icône se choisit (icône d'app dans
+  Paramètres → Applications, icône de raccourci de bureau, icône par
+  type de fichier dans l'Explorateur) - un seul composant partagé
+  (`IconPicker`), les icônes d'app changées dans Paramètres s'appliquent
+  partout (menu Démarrer, barre des tâches, bureau) immédiatement.
 - **Clic droit personnalisé** : bureau (actualiser, nouvelle fenêtre
   navigateur, nouveau raccourci, personnaliser), barre des tâches
   (restaurer/fermer une fenêtre), barre de titre des fenêtres

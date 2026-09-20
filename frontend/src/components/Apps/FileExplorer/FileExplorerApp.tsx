@@ -1,5 +1,8 @@
 import { ChangeEvent, FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { api, ApiError } from "../../../api/client";
+import { getFileCategory } from "../../../constants/icons";
+import { AppIconGlyph } from "../../IconPicker/AppIconGlyph";
+import { useFileTypeIcon } from "../../../state/fileTypeIconsStore";
 import type { FileEntry, FileSource } from "../../../types";
 
 interface ContextMenuState {
@@ -29,6 +32,12 @@ function formatDate(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "—";
   return d.toLocaleString();
+}
+
+function FileRowIcon({ entry }: { entry: FileEntry }) {
+  const category = getFileCategory(entry.name, entry.is_dir);
+  const icon = useFileTypeIcon(category);
+  return <AppIconGlyph className="file-icon" icon={icon} />;
 }
 
 export function FileExplorerApp() {
@@ -223,7 +232,7 @@ export function FileExplorerApp() {
                   }}
                 >
                   <td>
-                    <span className="file-icon">{entry.is_dir ? "📂" : "📄"}</span>
+                    <FileRowIcon entry={entry} />
                     {entry.name}
                   </td>
                   <td>{formatSize(entry.size, entry.is_dir)}</td>

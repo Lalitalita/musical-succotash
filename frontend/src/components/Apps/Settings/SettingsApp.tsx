@@ -5,6 +5,7 @@ import { useAuthStore } from "../../../state/authStore";
 import { useSettingsStore } from "../../../state/settingsStore";
 import { useWindowStore } from "../../../state/windowStore";
 import { AboutPanel } from "./AboutPanel";
+import { AppsSettingsPanel } from "./AppsSettingsPanel";
 import { UpdatePanel } from "./UpdatePanel";
 import { UsersPanel } from "./UsersPanel";
 
@@ -204,32 +205,7 @@ export function SettingsApp({ initialTab }: Props) {
           </div>
         )}
 
-        {tab === "applications" && (
-          <div>
-            <h4>Applications de messagerie</h4>
-            <p className="settings-hint">
-              Renseignez l'adresse de votre webmail et de votre calendrier. Ils s'ouvriront via le navigateur
-              sécurisé, accessibles depuis le menu Démarrer et le volet horloge. Pour le webmail bundled
-              (<code>docker compose --profile webmail up -d --build</code>), utilisez{" "}
-              <code>http://snappymail</code> - une fois connecté avec votre premier compte, ajoutez vos autres
-              adresses mail directement dans Snappymail (Paramètres → Comptes), sans rien reconfigurer ici.
-            </p>
-            <label className="settings-label">URL du webmail</label>
-            <input
-              className="settings-input"
-              placeholder="http://snappymail"
-              value={settings.mailUrl}
-              onChange={(e) => settings.update({ mailUrl: e.target.value })}
-            />
-            <label className="settings-label">URL du calendrier</label>
-            <input
-              className="settings-input"
-              placeholder="https://calendrier.example.com"
-              value={settings.calendarUrl}
-              onChange={(e) => settings.update({ calendarUrl: e.target.value })}
-            />
-          </div>
-        )}
+        {tab === "applications" && <AppsSettingsPanel />}
 
         {tab === "utilisateurs" && me?.is_admin && <UsersPanel />}
 

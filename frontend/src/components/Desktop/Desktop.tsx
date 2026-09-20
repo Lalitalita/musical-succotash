@@ -1,9 +1,11 @@
 import { CSSProperties, useState } from "react";
+import { APP_LABELS } from "../../constants/icons";
+import { AppIconGlyph } from "../IconPicker/AppIconGlyph";
+import { useAppIcon } from "../../state/appIconsStore";
 import { openContextMenu } from "../../state/contextMenuStore";
 import { useDesktopItemsStore } from "../../state/desktopItemsStore";
 import { useSettingsStore } from "../../state/settingsStore";
 import { useWindowStore } from "../../state/windowStore";
-import type { AppId } from "../../types";
 import { normalizeUrl } from "../../utils/url";
 import { ContextMenu } from "./ContextMenu";
 import { DesktopIcon } from "./DesktopIcon";
@@ -32,13 +34,6 @@ const WALLPAPERS: Record<string, string> = {
   slate: "linear-gradient(160deg, #232526, #414345)",
 };
 
-const APP_TITLES: Record<AppId, string> = {
-  browser: "Navigateur",
-  "security-dashboard": "Sécurité",
-  settings: "Paramètres",
-  files: "Explorateur de fichiers",
-};
-
 export function Desktop() {
   const [startOpen, setStartOpen] = useState(false);
   const [clockOpen, setClockOpen] = useState(false);
@@ -48,6 +43,7 @@ export function Desktop() {
   const wallpaperColor = useSettingsStore((s) => s.wallpaperColor);
   const wallpaperImageUrl = useSettingsStore((s) => s.wallpaperImageUrl);
   const { items, remove, move, setIcon } = useDesktopItemsStore();
+  const browserIcon = useAppIcon("browser");
 
   const desktopStyle: CSSProperties =
     wallpaper === "custom-color"
@@ -63,7 +59,7 @@ export function Desktop() {
 
   function openItem(item: (typeof items)[number]) {
     if (item.kind === "app" && item.appId) {
-      openWindow(item.appId, APP_TITLES[item.appId] || item.label);
+      openWindow(item.appId, APP_LABELS[item.appId] || item.label);
     } else if (item.kind === "url" && item.url) {
       const url = normalizeUrl(item.url);
       openWindow("browser", item.label, { forceNew: true, initialUrl: url });
@@ -96,7 +92,7 @@ export function Desktop() {
     >
       <div className="desktop-icons">
         <button className="desktop-icon desktop-icon-fixed" onDoubleClick={() => openWindow("browser", "Navigateur")}>
-          <span className="icon-glyph">🌐</span>
+          <AppIconGlyph className="icon-glyph" icon={browserIcon} />
           <span>Navigateur</span>
         </button>
         {items.map((item, index) => {

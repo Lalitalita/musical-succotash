@@ -307,6 +307,17 @@ input {
   font-size: 24px;
 }
 
+/* An app-icon override can be an uploaded image instead of an emoji -
+ * this scales it to whatever font-size the surrounding .icon-glyph context
+ * sets, wherever that context is used (start menu, taskbar, desktop...). */
+.icon-glyph img {
+  width: 1em;
+  height: 1em;
+  object-fit: cover;
+  border-radius: 4px;
+  vertical-align: -0.15em;
+}
+
 .start-menu-footer {
   display: flex;
   align-items: center;
@@ -712,7 +723,7 @@ table.attempts-table td {
 .browser-icon-btn {
   background: transparent;
   border: none;
-  color: var(--text-dim);
+  color: var(--accent);
   width: 32px;
   height: 32px;
   border-radius: 50%;
@@ -726,17 +737,18 @@ table.attempts-table td {
 }
 
 .browser-icon-btn:hover:not(:disabled) {
-  background: var(--surface-light);
-  color: var(--text);
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+  color: var(--accent);
 }
 
 .browser-icon-btn:disabled {
   opacity: 0.3;
   cursor: default;
+  color: var(--text-dim);
 }
 
 .browser-star.starred {
-  color: #ffcf6b;
+  background: color-mix(in srgb, var(--accent) 25%, transparent);
 }
 
 .browser-mode-toggle {
@@ -1070,6 +1082,49 @@ table.attempts-table td {
   font-weight: 500;
 }
 
+.icon-picker {
+  width: 340px;
+}
+
+.icon-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 6px;
+  max-height: 220px;
+  overflow-y: auto;
+  margin-bottom: 14px;
+}
+
+.icon-picker-cell {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 17px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.icon-picker-cell:hover {
+  background: var(--surface-light);
+}
+
+.icon-picker-cell.active {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+.icon-picker-upload {
+  margin-bottom: 4px;
+}
+
+.icon-picker-upload .settings-btn {
+  width: 100%;
+}
+
 .shortcut-kind-row {
   display: flex;
   gap: 8px;
@@ -1192,6 +1247,107 @@ table.attempts-table td {
   justify-content: space-between;
   padding: 8px 0;
   border-bottom: 1px solid var(--border);
+}
+
+/* ---------------- Apps settings (Windows-style list + detail) ---------------- */
+
+.app-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.app-list-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 8px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 13px;
+  text-align: left;
+}
+
+.app-list-row:hover {
+  background: var(--surface-light);
+}
+
+.app-list-icon {
+  font-size: 20px;
+  width: 24px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.app-list-label {
+  flex: 1;
+}
+
+.app-list-chevron {
+  color: var(--text-dim);
+  font-size: 16px;
+}
+
+.app-detail-back {
+  border: none;
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 13px;
+  padding: 0 0 16px;
+}
+
+.app-detail-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.app-detail-header h4 {
+  margin: 0;
+  text-transform: none;
+  font-size: 16px;
+  color: var(--text);
+}
+
+.app-detail-icon {
+  font-size: 32px;
+  width: 40px;
+  text-align: center;
+}
+
+.app-icon-change-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  border-radius: 6px;
+  padding: 4px 10px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.app-icon-change-btn:hover {
+  border-color: var(--accent);
+}
+
+.app-icon-preview {
+  font-size: 18px;
+}
+
+img.app-list-icon,
+img.app-detail-icon,
+img.app-icon-preview {
+  width: 1em;
+  height: 1em;
+  object-fit: cover;
+  border-radius: 4px;
 }
 
 .wallpaper-grid {
@@ -1702,6 +1858,14 @@ table.file-explorer-table tr:hover td {
 
 .file-explorer-table .file-icon {
   margin-right: 8px;
+}
+
+img.file-icon {
+  width: 16px;
+  height: 16px;
+  object-fit: cover;
+  border-radius: 3px;
+  vertical-align: -3px;
 }
 
 .file-context-menu {

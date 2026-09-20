@@ -5,6 +5,7 @@ import { MfaDecoyForm } from "./components/Login/MfaDecoyForm";
 import { useAuthStore } from "./state/authStore";
 import { saveDesktopState } from "./state/persistence";
 import { useSettingsStore } from "./state/settingsStore";
+import { darken } from "./utils/color";
 
 const AUTO_SAVE_INTERVAL_MS = 45_000;
 
@@ -19,6 +20,7 @@ export function App() {
 
   useEffect(() => {
     document.documentElement.style.setProperty("--accent", accent);
+    document.documentElement.style.setProperty("--accent-strong", darken(accent, 20));
   }, [accent]);
 
   useEffect(() => {

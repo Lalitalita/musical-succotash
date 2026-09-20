@@ -1,18 +1,41 @@
+import { AppIconGlyph } from "../IconPicker/AppIconGlyph";
+import { useAppIcon } from "../../state/appIconsStore";
 import { useAuthStore } from "../../state/authStore";
 import { useSettingsStore } from "../../state/settingsStore";
 import { useWindowStore } from "../../state/windowStore";
+import { APP_LABELS } from "../../constants/icons";
 import type { AppId } from "../../types";
 
 interface Props {
   onClose: () => void;
 }
 
-const APPS: { id: AppId; title: string; icon: string; adminOnly?: boolean }[] = [
-  { id: "browser", title: "Navigateur", icon: "🌐" },
-  { id: "files", title: "Explorateur de fichiers", icon: "📁" },
-  { id: "security-dashboard", title: "Sécurité", icon: "🛡️", adminOnly: true },
-  { id: "settings", title: "Paramètres", icon: "⚙️" },
+const APPS: { id: AppId; adminOnly?: boolean }[] = [
+  { id: "browser" },
+  { id: "files" },
+  { id: "security-dashboard", adminOnly: true },
+  { id: "settings" },
 ];
+
+function StartTile({
+  appId,
+  onClick,
+  disabled,
+  title,
+}: {
+  appId: AppId | "mail" | "calendar";
+  onClick: () => void;
+  disabled?: boolean;
+  title?: string;
+}) {
+  const icon = useAppIcon(appId);
+  return (
+    <button className="start-tile" onClick={onClick} disabled={disabled} title={title}>
+      <AppIconGlyph className="icon-glyph" icon={icon} />
+      {APP_LABELS[appId]}
+    </button>
+  );
+}
 
 export function StartMenu({ onClose }: Props) {
   const { windows, openWindow, focusWindow, toggleMinimize } = useWindowStore();
@@ -41,29 +64,20 @@ export function StartMenu({ onClose }: Props) {
       <h4>Applications épinglées</h4>
       <div className="start-menu-grid">
         {APPS.filter((a) => !a.adminOnly || me?.is_admin).map((a) => (
-          <button key={a.id} className="start-tile" onClick={() => launch(a.id, a.title)}>
-            <span className="icon-glyph">{a.icon}</span>
-            {a.title}
-          </button>
+          <StartTile key={a.id} appId={a.id} onClick={() => launch(a.id, APP_LABELS[a.id])} />
         ))}
-        <button
-          className="start-tile"
+        <StartTile
+          appId="mail"
           disabled={!mailUrl}
           title={mailUrl ? undefined : "Configurez l'URL dans Paramètres → Applications"}
           onClick={() => launchUrlApp(mailUrl, "Messagerie")}
-        >
-          <span className="icon-glyph">✉️</span>
-          Messagerie
-        </button>
-        <button
-          className="start-tile"
+        />
+        <StartTile
+          appId="calendar"
           disabled={!calendarUrl}
           title={calendarUrl ? undefined : "Configurez l'URL dans Paramètres → Applications"}
           onClick={() => launchUrlApp(calendarUrl, "Calendrier")}
-        >
-          <span className="icon-glyph">📅</span>
-          Calendrier
-        </button>
+        />
       </div>
       <div className="start-menu-footer">
         <div className="start-user">

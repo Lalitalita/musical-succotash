@@ -1,7 +1,10 @@
 import { api, ApiError } from "../api/client";
+import type { AppMetaId, FileTypeCategory } from "../constants/icons";
 import { DEFAULT_SETTINGS, type BrowserTab, type DesktopItem, type DesktopSettings, type WindowInstance } from "../types";
+import { type IconOverride, useAppIconsStore } from "./appIconsStore";
 import { useBrowserStore } from "./browserStore";
 import { useDesktopItemsStore } from "./desktopItemsStore";
+import { useFileTypeIconsStore } from "./fileTypeIconsStore";
 import { useSettingsStore } from "./settingsStore";
 import { useWindowStore } from "./windowStore";
 
@@ -10,6 +13,8 @@ interface DesktopBlob {
   browserTabs: Record<string, { tabs: BrowserTab[]; activeTabId: string }>;
   settings: DesktopSettings;
   desktopItems: DesktopItem[];
+  appIcons: Partial<Record<AppMetaId, IconOverride>>;
+  fileTypeIcons: Partial<Record<FileTypeCategory, IconOverride>>;
 }
 
 export function collectDesktopState(): DesktopBlob {
@@ -30,6 +35,8 @@ export function collectDesktopState(): DesktopBlob {
       calendarUrl: useSettingsStore.getState().calendarUrl,
     },
     desktopItems: useDesktopItemsStore.getState().items,
+    appIcons: useAppIconsStore.getState().overrides,
+    fileTypeIcons: useFileTypeIconsStore.getState().overrides,
   };
 }
 
@@ -57,6 +64,12 @@ export async function restoreDesktopState(): Promise<void> {
     }
     if (Array.isArray(state.desktopItems)) {
       useDesktopItemsStore.getState().hydrate(state.desktopItems);
+    }
+    if (state.appIcons) {
+      useAppIconsStore.getState().hydrate(state.appIcons);
+    }
+    if (state.fileTypeIcons) {
+      useFileTypeIconsStore.getState().hydrate(state.fileTypeIcons);
     }
   } catch (e) {
     if (!(e instanceof ApiError)) throw e;

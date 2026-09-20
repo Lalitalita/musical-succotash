@@ -93,6 +93,15 @@ class FullBrowserManager:
             return self._browser
         self._playwright = await async_playwright().start()
         self._browser = await self._playwright.chromium.launch(
+            # Headed, not headless: rendered into the virtual framebuffer the
+            # container's entrypoint starts with xvfb-run (nothing is ever
+            # actually displayed anywhere - it only exists so Chromium
+            # believes it has a real screen). Several sites, Google's login
+            # flow being the most notorious, actively fingerprint headless
+            # Chrome and refuse to sign in on it; running headed closes off
+            # a number of low-level differences that JS-visible property
+            # spoofing alone (below) can't paper over.
+            headless=False,
             args=[
                 "--no-sandbox",
                 "--disable-dev-shm-usage",
@@ -108,7 +117,7 @@ class FullBrowserManager:
                 # this flag plus the UA override and init script below make
                 # it look like an ordinary desktop Chrome instead.
                 "--disable-blink-features=AutomationControlled",
-            ]
+            ],
         )
         logger.info("Full-browser mode: Chromium launched on first use")
         return self._browser

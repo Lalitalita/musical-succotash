@@ -9,8 +9,15 @@ FROM python:3.12-slim-bookworm
 # self-update feature (see app/updater.py) - harmless if unused, since it
 # only does anything when the Docker socket is actually mounted in
 # (docker-compose.selfupdate.yml).
+# xvfb + xauth: full-browser mode launches Chromium in normal (headed) mode
+# into this virtual display instead of --headless - several sites (Google's
+# login flow being the most notorious) actively fingerprint headless
+# Chrome and refuse to sign in on it, and a handful of internal differences
+# between headless and headed rendering remain even with "the new headless
+# mode". Nothing is ever actually displayed anywhere; it's a framebuffer
+# that only exists so Chromium believes it has a real screen.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        libxml2 libxslt1.1 curl git docker.io \
+        libxml2 libxslt1.1 curl git docker.io xvfb xauth \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -33,4 +40,4 @@ EXPOSE 8000
 HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=5 \
     CMD curl -fs http://localhost:8000/api/health || exit 1
 
-CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["xvfb-run", "-a", "--server-args=-screen 0 1280x800x24", "python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
