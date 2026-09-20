@@ -1,15 +1,22 @@
-"""WebSocket endpoint for full-browser mode: streams JPEG screenshots of a
-server-side headless Chromium tab and applies input events sent back by the
+"""WebSocket endpoint for full-browser mode: streams JPEG frames of a
+server-side headless Chromium tab via the Chrome DevTools Protocol's native
+screencast (Page.startScreencast) and applies input events sent back by the
 client. See app/full_browser.py for the session manager and SSRF guard.
+
+CDP's screencast pushes a new frame only when the page actually changes,
+and Chrome will not send the next one until the current one is
+acknowledged (Page.screencastFrameAck) - unlike polling page.screenshot()
+on a fixed timer, this gives free backpressure (a slow client/network
+naturally throttles Chrome's own encoder instead of queuing up screenshot
+calls behind it) and near-zero cost while the page is actually idle.
 """
 import asyncio
+import base64
 import contextlib
 import logging
-import time
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, status
 
-from app.config import get_settings
 from app.database import SessionLocal
 from app.full_browser import NotOwnerError, SessionLimitError, manager
 from app.models import User
@@ -17,7 +24,6 @@ from app.security import decode_token
 
 router = APIRouter(prefix="/api/browser/full", tags=["browser-full"])
 logger = logging.getLogger("webdesktop.full_browser.ws")
-settings = get_settings()
 
 
 def _user_from_ws_cookies(websocket: WebSocket) -> User | None:
@@ -94,12 +100,6 @@ async def full_browser_ws(websocket: WebSocket, tab_id: str, url: str | None = N
         return
 
     page = session.page
-    # Tracks the last time the user actually did something (input or
-    # navigation) so the frame loop can poll fast right after an
-    # interaction and drop back to a slow idle rate otherwise - streaming a
-    # full screenshot every 350ms for a tab nobody is looking at is exactly
-    # the kind of background CPU/bandwidth drain that made things feel slow.
-    last_interaction = time.monotonic()
 
     if url and page.url in ("about:blank", ""):
         try:
@@ -108,26 +108,40 @@ async def full_browser_ws(websocket: WebSocket, tab_id: str, url: str | None = N
             await websocket.send_json({"type": "error", "message": f"Navigation impossible: {exc}"})
 
     stop_event = asyncio.Event()
+    cdp = await page.context.new_cdp_session(page)
 
-    async def frame_loop():
+    async def on_screencast_frame(cdp_params: dict) -> None:
+        try:
+            await websocket.send_bytes(base64.b64decode(cdp_params["data"]))
+        except Exception:  # noqa: BLE001
+            stop_event.set()
+        finally:
+            with contextlib.suppress(Exception):
+                await cdp.send("Page.screencastFrameAck", {"sessionId": cdp_params["sessionId"]})
+
+    cdp.on("Page.screencastFrame", lambda p: asyncio.create_task(on_screencast_frame(p)))
+    await cdp.send(
+        "Page.startScreencast",
+        {"format": "jpeg", "quality": 65, "maxWidth": 1600, "maxHeight": 1000, "everyNthFrame": 1},
+    )
+
+    async def url_loop():
+        # Screencast frames carry no metadata, so the title/address bar
+        # needs its own (much cheaper than a screenshot) polling loop.
+        last_seen = None
         while not stop_event.is_set():
             try:
-                data = await page.screenshot(type="jpeg", quality=60)
-                await websocket.send_bytes(data)
-                await websocket.send_json({"type": "url", "url": page.url, "title": await page.title()})
+                if page.url != last_seen:
+                    last_seen = page.url
+                    await websocket.send_json({"type": "url", "url": page.url, "title": await page.title()})
             except Exception:  # noqa: BLE001
                 break
-
-            active = (time.monotonic() - last_interaction) < settings.full_browser_active_window_seconds
-            interval_ms = settings.full_browser_frame_interval_ms if active else settings.full_browser_idle_frame_interval_ms
-            await asyncio.sleep(interval_ms / 1000)
+            await asyncio.sleep(0.5)
 
     async def receive_loop():
-        nonlocal last_interaction
         while True:
             msg = await websocket.receive_json()
             session.touch()
-            last_interaction = time.monotonic()
             if msg.get("type") == "copy":
                 # The remote page's own selected text has to be read back
                 # over the wire and written into the LOCAL clipboard - the
@@ -142,7 +156,7 @@ async def full_browser_ws(websocket: WebSocket, tab_id: str, url: str | None = N
                 continue
             await _apply_input(page, msg)
 
-    frame_task = asyncio.create_task(frame_loop())
+    url_task = asyncio.create_task(url_loop())
     try:
         await receive_loop()
     except WebSocketDisconnect:
@@ -151,6 +165,10 @@ async def full_browser_ws(websocket: WebSocket, tab_id: str, url: str | None = N
         logger.debug("Full-browser ws receive loop ended: %s", exc)
     finally:
         stop_event.set()
-        frame_task.cancel()
+        url_task.cancel()
         with contextlib.suppress(asyncio.CancelledError):
-            await frame_task
+            await url_task
+        with contextlib.suppress(Exception):
+            await cdp.send("Page.stopScreencast")
+        with contextlib.suppress(Exception):
+            await cdp.detach()

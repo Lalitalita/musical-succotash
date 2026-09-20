@@ -152,25 +152,32 @@ resteront cassés ou illisibles. Pour ces cas, chaque onglet a un bouton
 **Mode texte / Mode complet** qui bascule vers un vrai onglet Chromium headless
 piloté côté serveur (`backend/app/full_browser.py`) :
 
-- Le rendu est capturé en JPEG et diffusé au navigateur via WebSocket
-  (`/api/browser/full/ws`) ; la souris/clavier sont renvoyés dans l'autre sens.
-  Le poste client n'exécute jamais le JS du site, seulement des images.
+- Le rendu est diffusé au navigateur via WebSocket (`/api/browser/full/ws`)
+  en utilisant le screencast natif du protocole Chrome DevTools
+  (`Page.startScreencast`), pas un `page.screenshot()` sur une minuterie
+  fixe : Chrome ne pousse une frame que quand la page a réellement changé,
+  et attend l'accusé de réception de la précédente avant d'en envoyer une
+  autre - un onglet inactif ne coûte donc quasiment rien, et un client/
+  réseau lent ralentit naturellement l'encodage au lieu d'empiler des
+  captures en retard. La souris/clavier sont renvoyés dans l'autre sens ;
+  le copier-coller (Ctrl+C/V) fait le pont avec le presse-papier local. Le
+  poste client n'exécute jamais le JS du site, seulement des images.
 - Chaque requête réseau de la page (documents, XHR, images...) passe par le
   même garde-fou anti-SSRF que le mode texte (`page.route` + `validate_url`).
 - Ressources plafonnées : `FULL_BROWSER_MAX_SESSIONS` sessions simultanées au
   maximum, fermeture automatique après `FULL_BROWSER_IDLE_TIMEOUT_SECONDS`
   d'inactivité ou `FULL_BROWSER_MAX_LIFETIME_SECONDS` au total.
-- **Compromis assumé** : nettement plus lourd en bande passante/CPU qu'un
-  chargement HTML classique - c'est un mode d'appoint, pas le comportement
-  par défaut. `FULL_BROWSER_ENABLED=false` le désactive entièrement.
-  Chromium ne démarre pas au lancement du backend : il n'est lancé qu'à la
-  toute première utilisation du mode complet, pour ne rien coûter tant que
-  personne n'y touche. Le rythme de rafraîchissement s'adapte aussi :
-  `FULL_BROWSER_FRAME_INTERVAL_MS` (350ms par défaut) juste après une
-  interaction, puis `FULL_BROWSER_IDLE_FRAME_INTERVAL_MS` (2s) au bout de
-  `FULL_BROWSER_ACTIVE_WINDOW_SECONDS` sans rien faire - un onglet en mode
-  complet ouvert mais inactif ne doit pas monopoliser le CPU/la bande
-  passante en continu.
+- **Compromis assumé** : plus lourd en bande passante/CPU qu'un chargement
+  HTML classique, et l'audio/vidéo y est forcément moins fluide qu'une
+  vraie balise `<video>` (c'est une image de l'écran, pas un flux vidéo) -
+  pour du contenu vidéo/audio simple, le mode texte (qui, lui, sert le
+  fichier directement au lecteur du navigateur) reste nettement meilleur.
+  Le mode complet est un mode d'appoint pour les sites qui ont vraiment
+  besoin de JavaScript, pas le comportement par défaut.
+  `FULL_BROWSER_ENABLED=false` le désactive entièrement. Chromium ne
+  démarre pas au lancement du backend : il n'est lancé qu'à la toute
+  première utilisation du mode complet, pour ne rien coûter tant que
+  personne n'y touche.
 
 ## Session persistante du bureau
 
