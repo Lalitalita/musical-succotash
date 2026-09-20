@@ -136,11 +136,8 @@ input {
 
 .desktop-icons {
   position: absolute;
-  top: 20px;
-  left: 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
+  inset: 0;
+  padding: 20px 0 0 20px;
 }
 
 .desktop-icon {
@@ -155,6 +152,11 @@ input {
   cursor: pointer;
   padding: 6px;
   border-radius: 6px;
+  touch-action: none;
+}
+
+.desktop-icon-fixed {
+  position: relative;
 }
 
 .desktop-icon:hover {
@@ -163,6 +165,18 @@ input {
 
 .desktop-icon .icon-glyph {
   font-size: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+}
+
+.desktop-icon .icon-image {
+  width: 32px;
+  height: 32px;
+  object-fit: cover;
+  border-radius: 6px;
 }
 
 .desktop-icon span {
@@ -371,6 +385,11 @@ input {
   cursor: default;
   user-select: none;
   flex-shrink: 0;
+}
+
+.window-titlebar.has-content {
+  padding-left: 0;
+  gap: 4px;
 }
 
 .window-titlebar.dragging {
@@ -627,9 +646,9 @@ table.attempts-table td {
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 6px 6px 0;
-  background: rgba(255, 255, 255, 0.03);
-  flex-shrink: 0;
+  padding: 4px 6px;
+  flex: 1;
+  min-width: 0;
   overflow-x: auto;
 }
 
@@ -638,9 +657,9 @@ table.attempts-table td {
   align-items: center;
   gap: 8px;
   max-width: 170px;
-  padding: 6px 8px 6px 12px;
+  padding: 5px 8px 5px 12px;
   border: none;
-  border-radius: 8px 8px 0 0;
+  border-radius: 6px;
   background: rgba(255, 255, 255, 0.04);
   color: var(--text-dim);
   font-size: 12px;
@@ -1203,6 +1222,55 @@ table.attempts-table td {
 
 .accent-swatch.active {
   border-color: white;
+}
+
+.accent-swatch.custom-accent {
+  position: relative;
+  background: conic-gradient(red, yellow, lime, cyan, blue, magenta, red);
+  overflow: hidden;
+}
+
+.accent-swatch.custom-accent input[type="color"] {
+  position: absolute;
+  inset: -4px;
+  width: calc(100% + 8px);
+  height: calc(100% + 8px);
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  opacity: 0;
+}
+
+.wallpaper-custom-row {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.wallpaper-custom-row .wallpaper-swatch {
+  flex: 1;
+  background-size: cover;
+  background-position: center;
+  background-color: #333;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.wallpaper-swatch.custom-color {
+  align-items: center;
+  justify-content: center;
+}
+
+.wallpaper-swatch.custom-color input[type="color"] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  opacity: 0;
 }
 
 /* ---------------- Clock flyout / calendar ---------------- */

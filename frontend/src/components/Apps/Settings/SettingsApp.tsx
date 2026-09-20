@@ -1,9 +1,12 @@
 import { ChangeEvent, useEffect, useRef, useState } from "react";
 import { api } from "../../../api/client";
+import { saveDesktopState } from "../../../state/persistence";
 import { useAuthStore } from "../../../state/authStore";
 import { useSettingsStore } from "../../../state/settingsStore";
 import { useWindowStore } from "../../../state/windowStore";
 import { AboutPanel } from "./AboutPanel";
+import { MailAccountsPanel } from "./MailAccountsPanel";
+import { UpdatePanel } from "./UpdatePanel";
 import { UsersPanel } from "./UsersPanel";
 
 type Tab = "compte" | "bureau" | "applications" | "utilisateurs" | "systeme" | "apropos";
@@ -24,8 +27,11 @@ export function SettingsApp() {
   const settings = useSettingsStore();
   const [displayName, setDisplayName] = useState(me?.display_name || "");
   const [savingAvatar, setSavingAvatar] = useState(false);
+  const [uploadingWallpaper, setUploadingWallpaper] = useState(false);
+  const [resetDone, setResetDone] = useState(false);
   const [health, setHealth] = useState<"checking" | "ok" | "down">("checking");
   const fileInput = useRef<HTMLInputElement>(null);
+  const wallpaperFileInput = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     api
@@ -48,6 +54,24 @@ export function SettingsApp() {
 
   async function saveDisplayName() {
     await updateProfile({ display_name: displayName });
+  }
+
+  async function onWallpaperFileChange(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingWallpaper(true);
+    try {
+      const { url } = await api.upload("/uploads", file);
+      settings.update({ wallpaper: "custom-image", wallpaperImageUrl: url });
+      await saveDesktopState();
+    } finally {
+      setUploadingWallpaper(false);
+    }
+  }
+
+  function onWallpaperColorChange(color: string) {
+    settings.update({ wallpaper: "custom-color", wallpaperColor: color });
+    saveDesktopState();
   }
 
   return (
@@ -115,11 +139,38 @@ export function SettingsApp() {
                   key={w.id}
                   className={`wallpaper-swatch ${settings.wallpaper === w.id ? "active" : ""}`}
                   style={{ background: w.css }}
-                  onClick={() => settings.update({ wallpaper: w.id })}
+                  onClick={() => {
+                    settings.update({ wallpaper: w.id });
+                    saveDesktopState();
+                  }}
                 >
                   <span>{w.label}</span>
                 </button>
               ))}
+            </div>
+
+            <h4>Personnalisation avancée</h4>
+            <p className="settings-hint">Une couleur unie de votre choix, ou une image à vous.</p>
+            <div className="wallpaper-custom-row">
+              <label className={`wallpaper-swatch custom-color ${settings.wallpaper === "custom-color" ? "active" : ""}`}>
+                <input
+                  type="color"
+                  value={settings.wallpaperColor}
+                  onChange={(e) => onWallpaperColorChange(e.target.value)}
+                />
+                <span>Couleur unie</span>
+              </label>
+              <button
+                className={`wallpaper-swatch custom-image ${settings.wallpaper === "custom-image" ? "active" : ""}`}
+                style={
+                  settings.wallpaperImageUrl ? { backgroundImage: `url(${settings.wallpaperImageUrl})` } : undefined
+                }
+                onClick={() => wallpaperFileInput.current?.click()}
+                disabled={uploadingWallpaper}
+              >
+                <span>{uploadingWallpaper ? "Envoi..." : "Image personnalisée"}</span>
+              </button>
+              <input ref={wallpaperFileInput} type="file" accept="image/*" hidden onChange={onWallpaperFileChange} />
             </div>
 
             <h4>Couleur d'accent</h4>
@@ -129,9 +180,18 @@ export function SettingsApp() {
                   key={c}
                   className={`accent-swatch ${settings.accent === c ? "active" : ""}`}
                   style={{ background: c }}
-                  onClick={() => settings.update({ accent: c })}
+                  onClick={() => {
+                    settings.update({ accent: c });
+                    saveDesktopState();
+                  }}
                 />
               ))}
+              <label className="accent-swatch custom-accent">
+                <input type="color" value={settings.accent} onChange={(e) => {
+                  settings.update({ accent: e.target.value });
+                  saveDesktopState();
+                }} />
+              </label>
             </div>
           </div>
         )}
@@ -157,6 +217,8 @@ export function SettingsApp() {
               value={settings.calendarUrl}
               onChange={(e) => settings.update({ calendarUrl: e.target.value })}
             />
+
+            <MailAccountsPanel />
           </div>
         )}
 
@@ -185,6 +247,24 @@ export function SettingsApp() {
                 Ouvrir le tableau de bord de sécurité
               </button>
             )}
+
+            <h4>Navigation</h4>
+            <p className="settings-hint">
+              Vos connexions (Google, Instagram...) sont mémorisées automatiquement. Si un site reste bloqué dans un
+              état bizarre, effacez ses cookies pour repartir d'une session propre.
+            </p>
+            <button
+              className="settings-btn"
+              onClick={async () => {
+                await api.del("/browser/cookies");
+                setResetDone(true);
+              }}
+            >
+              Effacer les cookies de navigation
+            </button>
+            {resetDone && <p className="settings-hint">Cookies effacés.</p>}
+
+            {me?.is_admin && <UpdatePanel />}
           </div>
         )}
       </div>

@@ -6,9 +6,13 @@ import type { WindowInstance } from "../../types";
 interface Props {
   win: WindowInstance;
   children: ReactNode;
+  /** Replaces the plain title text in the titlebar - used by BrowserApp to
+   * fold its tab strip into the same draggable row as the window controls,
+   * instead of stacking two separate header bars. */
+  titlebarContent?: ReactNode;
 }
 
-export function Window({ win, children }: Props) {
+export function Window({ win, children, titlebarContent }: Props) {
   const { closeWindow, focusWindow, toggleMinimize, toggleMaximize, updateBounds } = useWindowStore();
   const [dragging, setDragging] = useState(false);
   const dragOrigin = useRef({ mouseX: 0, mouseY: 0, winX: 0, winY: 0 });
@@ -72,11 +76,13 @@ export function Window({ win, children }: Props) {
       onPointerDown={() => focusWindow(win.id)}
     >
       <div
-        className={`window-titlebar ${dragging ? "dragging" : ""}`}
+        className={`window-titlebar ${dragging ? "dragging" : ""} ${titlebarContent ? "has-content" : ""}`}
         onPointerDown={onTitlePointerDown}
         onPointerMove={onTitlePointerMove}
         onPointerUp={onTitlePointerUp}
-        onDoubleClick={() => toggleMaximize(win.id)}
+        onDoubleClick={(e) => {
+          if (e.target === e.currentTarget) toggleMaximize(win.id);
+        }}
         onContextMenu={(e) =>
           openContextMenu(e, [
             { label: "Réduire", icon: "—", onSelect: () => toggleMinimize(win.id) },
@@ -85,7 +91,7 @@ export function Window({ win, children }: Props) {
           ])
         }
       >
-        <span className="window-title">{win.title}</span>
+        {titlebarContent || <span className="window-title">{win.title}</span>}
         <div className="window-controls">
           <button onClick={() => toggleMinimize(win.id)} aria-label="Réduire">
             &#8211;

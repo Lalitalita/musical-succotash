@@ -90,11 +90,11 @@ ce dépôt) pour terminer le TLS et faire suivre vers
 
 1. `POST /api/auth/login` vérifie le mot de passe (haché Argon2id). En cas
    de succès, un jeton `mfa_token` de courte durée est renvoyé.
-2. L'écran de second facteur ressemble à un champ de date anodin
-   (`JJ/MM/AAAA`), avec insertion automatique de `/` tous les 2 chiffres
-   pendant la frappe. Une fois les slashs retirés côté serveur, le résultat
-   est un code TOTP standard à 6 chiffres, validé avec `pyotp`
-   (compatible Aegis / Google Authenticator).
+2. L'écran de second facteur ressemble à une demande anodine de confirmation
+   de date de naissance (`JJ/MM/AAAA`), avec insertion automatique de `/`
+   tous les 2 chiffres pendant la frappe. Une fois les slashs retirés côté
+   serveur, le résultat est un code TOTP standard à 6 chiffres, validé avec
+   `pyotp` (compatible Aegis / Google Authenticator).
 3. En cas de succès, un cookie de session `httpOnly` (JWT) est posé.
 
 ### Anti-bruteforce
@@ -177,8 +177,20 @@ piloté côté serveur (`backend/app/full_browser.py`) :
 À chaque déconnexion (et toutes les 45s en tâche de fond), l'état du bureau
 est sauvegardé côté serveur par utilisateur (`PUT /api/desktop/state`) :
 fenêtres ouvertes, position/taille, onglets du navigateur et leurs adresses,
-fond d'écran et couleur d'accent. À la reconnexion (`GET /api/desktop/state`),
-tout est restauré à l'identique.
+fond d'écran, couleur d'accent, position des icônes. À la reconnexion
+(`GET /api/desktop/state`), tout est restauré à l'identique. Le fond d'écran
+et l'accent sont en plus sauvegardés immédiatement dès qu'on les change,
+sans attendre le cycle de 45s.
+
+### Connexions aux sites (Google, Instagram...) mémorisées
+
+Le mode texte comme le mode complet mémorisent désormais vos cookies de
+session par utilisateur (stockés en base, `app/browser_cookies.py` pour le
+mode texte, `storage_state` Playwright par utilisateur pour le mode
+complet) : se reconnecter à un site à chaque nouvel onglet ou après un
+redémarrage du backend n'est plus nécessaire. "Effacer les cookies de
+navigation" dans Paramètres → Système repart de zéro si un site reste
+bloqué dans un état bizarre.
 
 ## Bureau et compte
 
@@ -204,7 +216,13 @@ tout est restauré à l'identique.
   explorateur de fichiers (télécharger/supprimer).
 - **Raccourcis de bureau** : clic droit → "Nouveau raccourci" crée une icône
   vers un site web ou une application, en plus de l'icône Navigateur fixe.
-  Persistés avec le reste de l'état du bureau.
+  Persistés avec le reste de l'état du bureau. Les icônes se déplacent à la
+  souris (glisser-déposer, position mémorisée) et leur icône peut être
+  remplacée par une image (clic droit → "Changer l'icône...", upload via
+  `POST /api/uploads`).
+- **Personnalisation du fond d'écran** : en plus des dégradés prédéfinis,
+  Paramètres → Bureau propose une couleur unie (sélecteur natif) ou une
+  image personnelle uploadée.
 - **Volet horloge avec agenda** : l'heure affichée inclut les secondes ; un
   petit calendrier du mois marque les jours ayant un événement, avec une
   liste "Événements à venir" et un formulaire d'ajout rapide
@@ -221,26 +239,45 @@ réinitialiser un TOTP ou supprimer un compte (le dernier compte admin ne
 peut ni être rétrogradé ni supprimé, pour ne jamais se retrouver sans accès
 admin).
 
-## Webmail Roundcube (bundled, optionnel)
+## Webmail unifié : Roundcube + Dovecot + fetchmail (bundled, optionnel)
 
-Un conteneur Roundcube est inclus mais **désactivé par défaut** (profil
-Docker Compose `roundcube`) : un simple `docker compose up -d --build` ne le
-démarre jamais, donc laisser les variables `ROUNDCUBE_*` vides dans `.env`
-ne bloque rien. Pour l'activer, une fois `ROUNDCUBE_IMAP_HOST` /
-`ROUNDCUBE_SMTP_HOST` / `ROUNDCUBE_DES_KEY` renseignés :
+Trois conteneurs (`roundcube`, `dovecot`, `fetchmail`), **désactivés par
+défaut** (profil Docker Compose `roundcube`) - un simple
+`docker compose up -d --build` ne les démarre jamais :
 
 ```bash
 docker compose --profile roundcube up -d --build
 ```
 
-Il tourne sur le réseau `internal` uniquement - jamais exposé publiquement
-ni même sur l'hôte. Le proxy navigateur (texte et mode complet) a une
-exception ciblée à son garde-fou anti-SSRF pour
-le seul hostname `roundcube` (`INTERNAL_PROXY_ALLOWLIST`), afin qu'il reste
-joignable depuis l'app Navigateur/le volet horloge sans ouvrir l'accès à
-n'importe quelle adresse privée. Configurez l'URL du webmail sur
-`http://roundcube` dans Paramètres → Applications (Roundcube étant assez
-JS-dépendant, le mode complet donne un meilleur résultat que le mode texte).
+Contrairement à la version précédente (un seul compte IMAP externe câblé
+dans `.env`), Roundcube se connecte maintenant à un serveur **Dovecot**
+embarqué qui sert de boîte unifiée : chaque utilisateur ajoute autant de
+comptes IMAP externes qu'il veut depuis Paramètres → Applications
+(`/api/mail/accounts`), et un conteneur **fetchmail** les relève en tâche de
+fond (toutes les 5 minutes) pour les déposer chacun dans son propre dossier
+de cette boîte unique - une seule connexion Roundcube pour tout voir.
+
+- Identifiants de connexion à Dovecot = nom d'utilisateur webdesktop +
+  mot de passe auto-généré, affichable une fois depuis Paramètres →
+  Applications ("Afficher le mot de passe de messagerie") pour le saisir
+  dans l'écran de connexion Roundcube.
+- Les mots de passe IMAP externes sont chiffrés en base (`app/crypto.py`,
+  dérivé de `SECRET_KEY`), jamais renvoyés en clair après l'ajout.
+- Dovecot n'a pas de serveur SMTP : pour **envoyer** depuis Roundcube,
+  renseignez `ROUNDCUBE_SMTP_HOST`/`ROUNDCUBE_SMTP_PORT` (un relais que vous
+  avez le droit d'utiliser), ou configurez un SMTP par identité directement
+  dans les paramètres d'identité de Roundcube.
+- Tout ce petit monde tourne sur le réseau `internal` uniquement - jamais
+  exposé publiquement ni même sur l'hôte. Le proxy navigateur a une
+  exception ciblée à son garde-fou anti-SSRF pour le seul hostname
+  `roundcube` (`INTERNAL_PROXY_ALLOWLIST`). Configurez l'URL du webmail sur
+  `http://roundcube` dans Paramètres → Applications (assez JS-dépendant, le
+  mode complet donne un meilleur résultat que le mode texte - et grâce à la
+  mémorisation des cookies/session, vous n'aurez plus à vous reconnecter à
+  chaque fois).
+- C'est une pièce d'infra plus avancée que le reste de l'appli (Dovecot +
+  Sieve pour le tri par dossier via une convention d'adressage `+dossier`) -
+  testez avec un compte non critique d'abord.
 
 ## Explorateur de fichiers (local + SMB)
 
@@ -342,6 +379,36 @@ Solution de secours encore plus directe (vide tout Redis, sans distinction) :
 ```bash
 docker compose exec redis redis-cli FLUSHALL
 ```
+
+## Mise à jour automatique (opt-in, donne un accès root à l'hôte)
+
+Un bouton "Sauvegarder et mettre à jour" dans Paramètres → Système (admin
+uniquement) vérifie GitHub, sauvegarde la base + les fichiers, puis
+reconstruit et redémarre toute la stack. **Désactivé par défaut** et il doit
+le rester tant que vous n'avez pas conscience de ce qu'il implique :
+
+- Activé (`SELF_UPDATE_ENABLED=true` + `docker-compose.selfupdate.yml`), le
+  backend obtient l'accès au socket Docker de l'hôte - un contrôle
+  équivalent à root sur la machine. C'est nécessaire pour qu'il puisse
+  lancer `git pull` + `docker compose up -d --build` sur le vrai
+  répertoire du projet, mais ça reste un changement de surface de sécurité
+  important pour une appli par ailleurs pensée pour être cloisonnée.
+- Pour l'activer :
+  ```bash
+  # Dans .env :
+  SELF_UPDATE_ENABLED=true
+  UPDATE_GITHUB_REPO=owner/repo
+  HOST_PROJECT_DIR=/chemin/absolu/reel/vers/ce/dossier/sur/l-hote
+
+  docker compose -f docker-compose.yml -f docker-compose.selfupdate.yml up -d --build
+  ```
+- Le vrai travail (sauvegarde, `git pull`, rebuild) se déroule dans un
+  conteneur jetable lancé à la volée (`docker run -d --rm docker:cli ...`),
+  pas dans le backend lui-même - sinon reconstruire le backend tuerait le
+  script qui pilote la mise à jour en plein milieu. Le statut de la
+  dernière tentative est visible dans le même panneau.
+- Sauvegardes déposées dans le volume `backend-backups` (dump SQL Postgres
+  + archive des fichiers utilisateurs), à chaque mise à jour.
 
 ## Notes de sécurité
 

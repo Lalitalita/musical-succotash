@@ -84,7 +84,11 @@ export interface BrowserTab {
 }
 
 export interface DesktopSettings {
+  /** A preset id from Desktop.tsx's WALLPAPERS map, or "custom-color" /
+   * "custom-image" to use wallpaperColor / wallpaperImageUrl below. */
   wallpaper: string;
+  wallpaperColor: string;
+  wallpaperImageUrl: string;
   accent: string;
   mailUrl: string;
   calendarUrl: string;
@@ -92,6 +96,8 @@ export interface DesktopSettings {
 
 export const DEFAULT_SETTINGS: DesktopSettings = {
   wallpaper: "default",
+  wallpaperColor: "#203a43",
+  wallpaperImageUrl: "",
   accent: "#4cc2ff",
   mailUrl: "",
   calendarUrl: "",
@@ -101,9 +107,16 @@ export interface DesktopItem {
   id: string;
   label: string;
   icon: string;
+  /** Custom uploaded image, takes priority over `icon` (an emoji) when set. */
+  iconUrl?: string;
   kind: "app" | "url";
   appId?: AppId;
   url?: string;
+  /** Free-form position on the desktop grid, in pixels from the top-left -
+   * absent until the user drags the icon at least once (falls back to the
+   * normal grid flow). */
+  x?: number;
+  y?: number;
 }
 
 export interface FileEntry {

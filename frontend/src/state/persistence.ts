@@ -23,6 +23,8 @@ export function collectDesktopState(): DesktopBlob {
     browserTabs,
     settings: {
       wallpaper: useSettingsStore.getState().wallpaper,
+      wallpaperColor: useSettingsStore.getState().wallpaperColor,
+      wallpaperImageUrl: useSettingsStore.getState().wallpaperImageUrl,
       accent: useSettingsStore.getState().accent,
       mailUrl: useSettingsStore.getState().mailUrl,
       calendarUrl: useSettingsStore.getState().calendarUrl,

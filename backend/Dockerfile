@@ -5,8 +5,12 @@
 # guess that references packages renamed/removed on the real distro.
 FROM python:3.12-slim-bookworm
 
+# git + docker.io (Docker CLI only, no daemon) are here for the opt-in
+# self-update feature (see app/updater.py) - harmless if unused, since it
+# only does anything when the Docker socket is actually mounted in
+# (docker-compose.selfupdate.yml).
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        libxml2 libxslt1.1 curl \
+        libxml2 libxslt1.1 curl git docker.io \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

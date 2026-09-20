@@ -17,9 +17,21 @@ networks:
 volumes:
   postgres-data:
   redis-data:
+  # Fixed (non project-prefixed) names: the self-update feature's ephemeral
+  # helper container references these by exact name over the Docker socket,
+  # from outside this compose project's namespacing.
   backend-uploads:
+    name: backend-uploads
   backend-userfiles:
+    name: backend-userfiles
+  backend-browser-state:
+    name: backend-browser-state
+  backend-backups:
+    name: backend-backups
   roundcube-data:
+  mail-data:
+  mail-config:
+  fetchmail-state:
 
 services:
   frontend:
@@ -96,10 +108,18 @@ services:
       SMB_USERNAME: ${SMB_USERNAME:-}
       SMB_PASSWORD: ${SMB_PASSWORD:-}
       SMB_DOMAIN: ${SMB_DOMAIN:-}
+
+      SELF_UPDATE_ENABLED: ${SELF_UPDATE_ENABLED:-false}
+      UPDATE_GITHUB_REPO: ${UPDATE_GITHUB_REPO:-}
+      UPDATE_GIT_BRANCH: ${UPDATE_GIT_BRANCH:-main}
+      HOST_PROJECT_DIR: ${HOST_PROJECT_DIR:-}
     volumes:
       - ./backend/geoip:/app/geoip:ro
       - backend-uploads:/app/uploads
       - backend-userfiles:/app/userfiles
+      - backend-browser-state:/app/browser_state
+      - backend-backups:/app/backups
+      - mail-config:/app/mailconfig
     depends_on:
       postgres:
         condition: service_healthy
@@ -142,16 +162,17 @@ services:
       timeout: 5s
       retries: 5
 
-  # Self-hosted webmail. Opt-in: this service only starts with
-  # `docker compose --profile roundcube up -d --build`, never on a plain
-  # `docker compose up -d --build` - so leaving the ROUNDCUBE_* vars empty
-  # in .env is fine and requires no extra action. Never exposed publicly or
-  # even to the host: only reachable by "backend" over the "internal"
-  # network, and only through the browser proxy's INTERNAL_PROXY_ALLOWLIST
-  # ("roundcube" by default - see backend/app/browser_ssrf.py). It needs its
-  # own outbound internet access to reach your real IMAP/SMTP server, hence
-  # "internal" and not "data". Point Paramètres → Applications → "URL du
-  # webmail" at http://roundcube once IMAP_HOST/SMTP_HOST below are set.
+  # Self-hosted webmail giving ONE login access to ALL of a user's mail:
+  # Roundcube reads from the bundled "dovecot" server, which "fetchmail"
+  # keeps populated from every external IMAP account the user added in
+  # Paramètres → Applications (each lands in its own folder - see
+  # app/mail_config.py). Opt-in: these three services only start with
+  # `docker compose --profile roundcube up -d --build`. Never exposed
+  # publicly or even to the host - only reachable by "backend" over the
+  # "internal" network, and only through the browser proxy's
+  # INTERNAL_PROXY_ALLOWLIST ("roundcube" by default - see
+  # backend/app/browser_ssrf.py). Set ROUNDCUBE_SMTP_HOST if you also want
+  # to send mail from here (Dovecot itself has no SMTP - see README).
   roundcube:
     image: roundcube/roundcubemail:latest
     profiles: ["roundcube"]
@@ -161,17 +182,46 @@ services:
     environment:
       ROUNDCUBEMAIL_DB_TYPE: sqlite
       ROUNDCUBEMAIL_SKIN: elastic
-      ROUNDCUBEMAIL_DEFAULT_HOST: ${ROUNDCUBE_IMAP_HOST:-}
-      ROUNDCUBEMAIL_DEFAULT_PORT: ${ROUNDCUBE_IMAP_PORT:-993}
+      ROUNDCUBEMAIL_DEFAULT_HOST: dovecot
+      ROUNDCUBEMAIL_DEFAULT_PORT: 143
       ROUNDCUBEMAIL_SMTP_SERVER: ${ROUNDCUBE_SMTP_HOST:-}
       ROUNDCUBEMAIL_SMTP_PORT: ${ROUNDCUBE_SMTP_PORT:-587}
       # Must be exactly 24 characters - generate with: openssl rand -hex 12
       ROUNDCUBEMAIL_DES_KEY: ${ROUNDCUBE_DES_KEY:-}
     volumes:
       - roundcube-data:/var/roundcube/db
+    depends_on:
+      - dovecot
     healthcheck:
       test: ["CMD", "curl", "-fs", "http://localhost/"]
       interval: 15s
       timeout: 5s
       retries: 5
       start_period: 20s
+
+  # Unified inbox backend - see the comment on "roundcube" above.
+  dovecot:
+    build:
+      context: ./mail/dovecot
+    profiles: ["roundcube"]
+    restart: unless-stopped
+    networks:
+      - internal
+    volumes:
+      - mail-data:/var/mail
+      - mail-config:/etc/dovecot/shared:ro
+
+  # Pulls each user's external IMAP accounts into "dovecot" above. Needs
+  # outbound internet to reach the real mail providers, hence "internal".
+  fetchmail:
+    build:
+      context: ./mail/fetchmail
+    profiles: ["roundcube"]
+    restart: unless-stopped
+    networks:
+      - internal
+    volumes:
+      - mail-config:/etc/fetchmail-shared:ro
+      - fetchmail-state:/var/lib/fetchmail
+    depends_on:
+      - dovecot

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { CSSProperties, useState } from "react";
 import { openContextMenu } from "../../state/contextMenuStore";
 import { useDesktopItemsStore } from "../../state/desktopItemsStore";
 import { useSettingsStore } from "../../state/settingsStore";
@@ -6,10 +6,23 @@ import { useWindowStore } from "../../state/windowStore";
 import type { AppId } from "../../types";
 import { normalizeUrl } from "../../utils/url";
 import { ContextMenu } from "./ContextMenu";
+import { DesktopIcon } from "./DesktopIcon";
 import { NewShortcutForm } from "./NewShortcutForm";
 import { StartMenu } from "./StartMenu";
 import { Taskbar } from "./Taskbar";
 import { WindowManager } from "./WindowManager";
+
+const ICON_COL_WIDTH = 102;
+const ICON_ROW_HEIGHT = 108;
+
+// Positions are relative to .desktop-icons's padding box (see global.css) -
+// (0, 0) already lands at the usual 20px inset from the screen edge.
+function defaultIconPos(index: number): { x: number; y: number } {
+  const perColumn = Math.max(1, Math.floor((window.innerHeight - 80) / ICON_ROW_HEIGHT));
+  const col = Math.floor(index / perColumn);
+  const row = index % perColumn;
+  return { x: col * ICON_COL_WIDTH, y: row * ICON_ROW_HEIGHT };
+}
 
 const WALLPAPERS: Record<string, string> = {
   default: "linear-gradient(160deg, #0f2027, #203a43 55%, #2c5364)",
@@ -32,7 +45,16 @@ export function Desktop() {
   const [addingShortcut, setAddingShortcut] = useState(false);
   const { openWindow } = useWindowStore();
   const wallpaper = useSettingsStore((s) => s.wallpaper);
-  const { items, remove } = useDesktopItemsStore();
+  const wallpaperColor = useSettingsStore((s) => s.wallpaperColor);
+  const wallpaperImageUrl = useSettingsStore((s) => s.wallpaperImageUrl);
+  const { items, remove, move, setIcon } = useDesktopItemsStore();
+
+  const desktopStyle: CSSProperties =
+    wallpaper === "custom-color"
+      ? { background: wallpaperColor }
+      : wallpaper === "custom-image" && wallpaperImageUrl
+      ? { backgroundImage: `url(${wallpaperImageUrl})`, backgroundSize: "cover", backgroundPosition: "center" }
+      : { background: WALLPAPERS[wallpaper] || WALLPAPERS.default };
 
   function closeFlyouts() {
     setStartOpen(false);
@@ -51,7 +73,7 @@ export function Desktop() {
   return (
     <div
       className="desktop"
-      style={{ background: WALLPAPERS[wallpaper] || WALLPAPERS.default }}
+      style={desktopStyle}
       onClick={closeFlyouts}
       onContextMenu={(e) =>
         openContextMenu(e, [
@@ -73,26 +95,28 @@ export function Desktop() {
       }
     >
       <div className="desktop-icons">
-        <button className="desktop-icon" onDoubleClick={() => openWindow("browser", "Navigateur")}>
+        <button className="desktop-icon desktop-icon-fixed" onDoubleClick={() => openWindow("browser", "Navigateur")}>
           <span className="icon-glyph">🌐</span>
           <span>Navigateur</span>
         </button>
-        {items.map((item) => (
-          <button
-            key={item.id}
-            className="desktop-icon"
-            onDoubleClick={() => openItem(item)}
-            onContextMenu={(e) =>
-              openContextMenu(e, [
-                { label: "Ouvrir", icon: "↗", onSelect: () => openItem(item) },
-                { label: "Supprimer", icon: "🗑", danger: true, separatorBefore: true, onSelect: () => remove(item.id) },
-              ])
-            }
-          >
-            <span className="icon-glyph">{item.icon}</span>
-            <span>{item.label}</span>
-          </button>
-        ))}
+        {items.map((item, index) => {
+          const pos = item.x != null && item.y != null ? { x: item.x, y: item.y } : defaultIconPos(index + 1);
+          return (
+            <DesktopIcon
+              key={item.id}
+              id={item.id}
+              label={item.label}
+              icon={item.icon}
+              iconUrl={item.iconUrl}
+              x={pos.x}
+              y={pos.y}
+              onOpen={() => openItem(item)}
+              onRemove={() => remove(item.id)}
+              onMove={move}
+              onSetIcon={setIcon}
+            />
+          );
+        })}
       </div>
 
       <WindowManager />

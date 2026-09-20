@@ -5,6 +5,8 @@ interface DesktopItemsState {
   items: DesktopItem[];
   add: (item: Omit<DesktopItem, "id">) => void;
   remove: (id: string) => void;
+  move: (id: string, x: number, y: number) => void;
+  setIcon: (id: string, iconUrl: string) => void;
   hydrate: (items: DesktopItem[]) => void;
 }
 
@@ -18,6 +20,11 @@ export const useDesktopItemsStore = create<DesktopItemsState>((set, get) => ({
   },
 
   remove: (id) => set({ items: get().items.filter((i) => i.id !== id) }),
+
+  move: (id, x, y) =>
+    set({ items: get().items.map((i) => (i.id === id ? { ...i, x, y } : i)) }),
+
+  setIcon: (id, iconUrl) => set({ items: get().items.map((i) => (i.id === id ? { ...i, iconUrl } : i)) }),
 
   hydrate: (items) => set({ items: Array.isArray(items) ? items : [] }),
 }));

@@ -80,6 +80,10 @@ class Settings(BaseSettings):
     # just sitting open in the background.
     full_browser_idle_frame_interval_ms: int = 2000
     full_browser_active_window_seconds: float = 2.0
+    # Cookies/localStorage per user, persisted here so a full-mode login
+    # (e.g. Gmail) survives closing the tab or restarting the backend.
+    full_browser_state_dir: str = "/app/browser_state"
+    full_browser_state_save_interval_seconds: int = 15
 
     # --- Bootstrap admin (first run only, ignored if any user exists) ---
     bootstrap_admin_username: str = "admin"
@@ -104,6 +108,22 @@ class Settings(BaseSettings):
     smb_username: str = ""
     smb_password: str = ""
     smb_domain: str = ""
+
+    # --- Self-update (opt-in, requires the docker.sock + host-dir mount from
+    # docker-compose.selfupdate.yml - see README, this grants the backend
+    # root-equivalent control of the host). ---
+    self_update_enabled: bool = False
+    update_github_repo: str = ""  # "owner/repo"
+    update_git_branch: str = "main"
+    # Must be the REAL, absolute path of the project directory on the HOST
+    # (not inside this container) - docker-compose.selfupdate.yml bind-mounts
+    # it at the same path on both sides so the host dockerd (reached through
+    # the socket) resolves it correctly.
+    host_project_dir: str = ""
+    update_backup_dir: str = "/app/backups"
+
+    # --- Unified webmail (fetchmail + Dovecot + Roundcube) ---
+    mail_config_dir: str = "/app/mailconfig"
 
     @property
     def admin_whitelist_list(self) -> List[str]:

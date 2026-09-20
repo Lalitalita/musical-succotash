@@ -2,12 +2,13 @@ import { FormEvent, useState } from "react";
 import { useAuthStore } from "../../state/authStore";
 
 /**
- * Decoy second factor. Visually this looks like a harmless "confirm this
- * date" prompt (placeholder JJ/MM/AAAA, auto-inserted slashes every 2
- * digits). In reality the 6 digits typed here are validated server-side as
- * a standard TOTP code - the slashes are cosmetic and stripped before
- * verification, so this works with a normal Aegis / Google Authenticator
- * entry of "123456".
+ * Decoy second factor. Visually this looks like a harmless "confirm your
+ * birthdate" prompt (placeholder JJ/MM/AAAA, auto-inserted slashes every 2
+ * digits) - a shoulder-surfer sees a normal account-verification question,
+ * not a security screen. In reality the 6 digits typed here are validated
+ * server-side as a standard TOTP code - the slashes are cosmetic and
+ * stripped before verification, so this works with a normal Aegis /
+ * Google Authenticator entry of "123456".
  */
 function formatDecoy(value: string): string {
   const digits = value.replace(/\D/g, "").slice(0, 6);
@@ -32,8 +33,8 @@ export function MfaDecoyForm() {
     <div className="auth-shell">
       <form className="auth-card" onSubmit={onSubmit}>
         <div className="auth-avatar">📅</div>
-        <h2>Confirmer la date</h2>
-        <div className="auth-hint">Merci de confirmer la date indiquée sur votre justificatif</div>
+        <h2>Confirmer votre date de naissance</h2>
+        <div className="auth-hint">Merci de resaisir votre date de naissance pour vérifier votre identité</div>
         {error && <div className="auth-error">{error}</div>}
         <input
           className="auth-field"

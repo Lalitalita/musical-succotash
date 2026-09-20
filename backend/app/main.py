@@ -8,6 +8,7 @@ from app.full_browser import manager as full_browser_manager
 from app.init_db import init_db
 from app.routers import (
     admin,
+    admin_update,
     admin_users,
     auth,
     bookmarks,
@@ -17,6 +18,7 @@ from app.routers import (
     events,
     files,
     full_browser,
+    mail_accounts,
     uploads,
 )
 
@@ -63,3 +65,5 @@ app.include_router(events.router)
 app.include_router(full_browser.router)
 app.include_router(files.router)
 app.include_router(diagnostics.router)
+app.include_router(admin_update.router)
+app.include_router(mail_accounts.router)

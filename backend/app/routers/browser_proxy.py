@@ -19,9 +19,12 @@ import httpx
 from bs4 import BeautifulSoup
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from fastapi.responses import StreamingResponse
+from sqlalchemy.orm import Session
 
+from app.browser_cookies import clear_jar, load_jar, save_jar
 from app.browser_ssrf import UnsafeUrlError, validate_url
 from app.config import get_settings
+from app.database import get_db
 from app.deps import get_current_user
 from app.models import User
 
@@ -131,7 +134,12 @@ def _resolve_target_url(request: Request) -> str:
     raise BrowserFetchError(status.HTTP_400_BAD_REQUEST, "Adresse manquante.")
 
 
-def _fetch(url: str, method: str = "GET", data: list[tuple[str, str]] | None = None) -> tuple[httpx.Response, str]:
+def _fetch(
+    url: str,
+    method: str = "GET",
+    data: list[tuple[str, str]] | None = None,
+    cookies: httpx.Cookies | None = None,
+) -> tuple[httpx.Response, str]:
     current = url
     current_method = method
     current_body = urlencode(data).encode() if data else None
@@ -152,11 +160,15 @@ def _fetch(url: str, method: str = "GET", data: list[tuple[str, str]] | None = N
                 current,
                 content=current_body,
                 headers=req_headers,
+                cookies=cookies,
             )
         except httpx.TimeoutException:
             raise BrowserFetchError(status.HTTP_504_GATEWAY_TIMEOUT, "Le site a mis trop de temps à répondre.")
         except httpx.HTTPError as exc:
             raise BrowserFetchError(status.HTTP_502_BAD_GATEWAY, f"La requête vers le site a échoué ({exc}).")
+
+        if cookies is not None:
+            cookies.extract_cookies(resp)
 
         if resp.is_redirect:
             location = resp.headers.get("location")
@@ -173,7 +185,7 @@ def _fetch(url: str, method: str = "GET", data: list[tuple[str, str]] | None = N
     raise BrowserFetchError(status.HTTP_502_BAD_GATEWAY, "Trop de redirections.")
 
 
-def _resolve_redirect_chain(url: str) -> str:
+def _resolve_redirect_chain(url: str, cookies: httpx.Cookies | None = None) -> str:
     """Like _fetch, but only follows redirects (no body read) to find the
     final URL - used before streaming an asset so we never buffer it."""
     current = url
@@ -184,7 +196,11 @@ def _resolve_redirect_chain(url: str) -> str:
             raise BrowserFetchError(status.HTTP_400_BAD_REQUEST, str(exc))
 
         try:
-            with _http_client.stream("GET", current, headers={"User-Agent": settings.browser_proxy_user_agent}) as resp:
+            with _http_client.stream(
+                "GET", current, headers={"User-Agent": settings.browser_proxy_user_agent}, cookies=cookies
+            ) as resp:
+                if cookies is not None:
+                    cookies.extract_cookies(resp)
                 if not resp.is_redirect:
                     return current
                 location = resp.headers.get("location")
@@ -285,33 +301,49 @@ def _handle_fetch_result(resp: httpx.Response, final_url: str) -> Response:
     return Response(content=_wrap_page(title, rewritten), media_type="text/html")
 
 
+@router.delete("/cookies")
+def clear_cookies(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Forget every saved login/session cookie for this user - useful when a
+    site's session gets stuck in a bad state."""
+    clear_jar(db, user.id)
+    return {"cleared": True}
+
+
 @router.get("/view", response_class=Response)
-def view(request: Request, user: User = Depends(get_current_user)):
+def view(request: Request, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    jar = load_jar(db, user.id)
     try:
         target = _resolve_target_url(request)
-        resp, final_url = _fetch(target)
+        resp, final_url = _fetch(target, cookies=jar)
     except BrowserFetchError as exc:
         return _error_page(exc.message)
+    finally:
+        save_jar(db, user.id, jar)
     return _handle_fetch_result(resp, final_url)
 
 
 @router.post("/view", response_class=Response)
-async def view_post(request: Request, user: User = Depends(get_current_user)):
+async def view_post(request: Request, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    jar = load_jar(db, user.id)
     try:
         target = _resolve_target_url(request)
         form = await request.form()
         data = [(k, v) for k, v in form.multi_items() if isinstance(v, str)]
-        resp, final_url = _fetch(target, method="POST", data=data)
+        resp, final_url = _fetch(target, method="POST", data=data, cookies=jar)
     except BrowserFetchError as exc:
         return _error_page(exc.message)
+    finally:
+        save_jar(db, user.id, jar)
     return _handle_fetch_result(resp, final_url)
 
 
 @router.get("/asset")
-def asset(request: Request, url: str = Query(...), user: User = Depends(get_current_user)):
+def asset(request: Request, url: str = Query(...), user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    jar = load_jar(db, user.id)
     try:
-        final_url = _resolve_redirect_chain(url)
+        final_url = _resolve_redirect_chain(url, cookies=jar)
     except BrowserFetchError as exc:
+        save_jar(db, user.id, jar)
         raise HTTPException(exc.status_code, exc.message)
 
     upstream_headers = {"User-Agent": settings.browser_proxy_user_agent}
@@ -320,10 +352,14 @@ def asset(request: Request, url: str = Query(...), user: User = Depends(get_curr
         upstream_headers["Range"] = range_header
 
     try:
-        req = _http_client.build_request("GET", final_url, headers=upstream_headers)
+        req = _http_client.build_request("GET", final_url, headers=upstream_headers, cookies=jar)
         upstream = _http_client.send(req, stream=True)
     except httpx.HTTPError as exc:
+        save_jar(db, user.id, jar)
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"La requête vers la ressource a échoué ({exc}).")
+
+    jar.extract_cookies(upstream)
+    save_jar(db, user.id, jar)
 
     content_type = upstream.headers.get("content-type", "application/octet-stream")
     if not any(content_type.startswith(p) for p in _ASSET_CONTENT_TYPES):

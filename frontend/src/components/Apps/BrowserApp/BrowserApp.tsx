@@ -11,7 +11,7 @@ interface Props {
 }
 
 export function BrowserApp({ windowId, initialUrl }: Props) {
-  const { byWindow, ensureWindow, addTab, closeTab, setActiveTab, navigate, reload, setMode } = useBrowserStore();
+  const { byWindow, ensureWindow, navigate, reload, setMode } = useBrowserStore();
   const { bookmarks, loaded, load, add, remove } = useBookmarksStore();
   const [addressInput, setAddressInput] = useState("");
   const [addingBookmark, setAddingBookmark] = useState(false);
@@ -58,36 +58,6 @@ export function BrowserApp({ windowId, initialUrl }: Props) {
 
   return (
     <div className="browser-app">
-      <div className="browser-tabs">
-        {win.tabs.map((tab) => (
-          <button
-            key={tab.id}
-            className={`browser-tab ${tab.id === win.activeTabId ? "active" : ""}`}
-            onClick={() => setActiveTab(windowId, tab.id)}
-            onContextMenu={(e) =>
-              openContextMenu(e, [
-                { label: "Recharger", icon: "⟳", onSelect: () => reload(windowId, tab.id) },
-                { label: "Fermer", icon: "✕", danger: true, separatorBefore: true, onSelect: () => closeTab(windowId, tab.id) },
-              ])
-            }
-          >
-            <span className="browser-tab-title">{tab.title}</span>
-            <span
-              className="browser-tab-close"
-              onClick={(e) => {
-                e.stopPropagation();
-                closeTab(windowId, tab.id);
-              }}
-            >
-              ✕
-            </span>
-          </button>
-        ))}
-        <button className="browser-tab-new" onClick={() => addTab(windowId)} title="Nouvel onglet">
-          +
-        </button>
-      </div>
-
       <form className="browser-toolbar" onSubmit={onNavigate}>
         <input
           placeholder="Entrer une adresse (ex: exemple.com)"

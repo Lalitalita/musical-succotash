@@ -1,0 +1,18 @@
+# Opt-in override that grants the backend container the ability to update
+# the whole stack from a button in the webdesktop (Paramètres > Système).
+#
+# WARNING: mounting the Docker socket gives the backend root-equivalent
+# control of this host (it can start/stop/inspect any container, and by
+# extension read/write anything the Docker daemon can). Only use this if
+# you understand and accept that trade-off. Without this file, the backend
+# has no way to reach Docker or the host filesystem at all.
+#
+# Usage:
+#   1. In .env, set SELF_UPDATE_ENABLED=true, UPDATE_GITHUB_REPO=<owner/repo>
+#      and HOST_PROJECT_DIR=<absolute path of THIS directory on the host>.
+#   2. docker compose -f docker-compose.yml -f docker-compose.selfupdate.yml up -d --build
+services:
+  backend:
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${HOST_PROJECT_DIR}:${HOST_PROJECT_DIR}
