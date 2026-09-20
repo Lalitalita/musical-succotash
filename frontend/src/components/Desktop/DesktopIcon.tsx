@@ -1,7 +1,9 @@
 import { useRef, useState } from "react";
-import { api } from "../../api/client";
 import { openContextMenu } from "../../state/contextMenuStore";
 import { saveDesktopState } from "../../state/persistence";
+import type { IconOverride } from "../../state/appIconsStore";
+import { IconPicker } from "../IconPicker/IconPicker";
+import { AppIconGlyph } from "../IconPicker/AppIconGlyph";
 
 interface Props {
   id: string;
@@ -13,15 +15,15 @@ interface Props {
   onOpen: () => void;
   onRemove?: () => void;
   onMove: (id: string, x: number, y: number) => void;
-  onSetIcon: (id: string, url: string) => void;
+  onSetIcon: (id: string, value: IconOverride) => void;
 }
 
 const DRAG_THRESHOLD = 4;
 
 export function DesktopIcon({ id, label, icon, iconUrl, x, y, onOpen, onRemove, onMove, onSetIcon }: Props) {
   const [dragPos, setDragPos] = useState<{ x: number; y: number } | null>(null);
+  const [picking, setPicking] = useState(false);
   const dragRef = useRef<{ startX: number; startY: number; origX: number; origY: number; moved: boolean } | null>(null);
-  const fileInput = useRef<HTMLInputElement>(null);
 
   function onPointerDown(e: React.PointerEvent<HTMLButtonElement>) {
     if (e.button !== 0) return;
@@ -49,14 +51,6 @@ export function DesktopIcon({ id, label, icon, iconUrl, x, y, onOpen, onRemove, 
     setDragPos(null);
   }
 
-  async function onIconFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const { url } = await api.upload("/uploads", file);
-    onSetIcon(id, url);
-    saveDesktopState();
-  }
-
   const pos = dragPos || { x, y };
 
   return (
@@ -71,19 +65,27 @@ export function DesktopIcon({ id, label, icon, iconUrl, x, y, onOpen, onRemove, 
         onContextMenu={(e) =>
           openContextMenu(e, [
             { label: "Ouvrir", icon: "↗", onSelect: onOpen },
-            { label: "Changer l'icône...", icon: "🖼", onSelect: () => fileInput.current?.click() },
+            { label: "Changer l'icône...", icon: "🖼", onSelect: () => setPicking(true) },
             ...(onRemove
               ? [{ label: "Supprimer", icon: "🗑", danger: true, separatorBefore: true, onSelect: onRemove }]
               : []),
           ])
         }
       >
-        <span className="icon-glyph">
-          {iconUrl ? <img className="icon-image" src={iconUrl} alt="" /> : icon}
-        </span>
+        <AppIconGlyph className="icon-glyph" icon={{ icon, iconUrl }} />
         <span>{label}</span>
       </button>
-      <input ref={fileInput} type="file" accept="image/*" hidden onChange={onIconFileChange} />
+      {picking && (
+        <IconPicker
+          value={{ icon, iconUrl }}
+          onChange={(v) => {
+            onSetIcon(id, v);
+            saveDesktopState();
+          }}
+          onClose={() => setPicking(false)}
+          title={`Icône - ${label}`}
+        />
+      )}
     </>
   );
 }

@@ -31,6 +31,31 @@ volumes:
   snappymail-data:
 
 services:
+  # A real, plain SOCKS5 proxy: point your OWN browser (any device on the
+  # LAN) at it and all its traffic exits through this Debian host - full
+  # native browser speed/quality/JS support, nothing server-side rendered
+  # or screenshotted. Opt-in (`docker compose --profile proxy up -d --build`)
+  # and refuses to start without SOCKS5_USER/SOCKS5_PASSWORD set (never an
+  # open relay). See README for how to configure a browser to use it.
+  socks5-proxy:
+    build:
+      context: ./proxy
+    profiles: ["proxy"]
+    restart: unless-stopped
+    networks:
+      - internal
+    ports:
+      - "${SOCKS5_PORT:-1080}:1080"
+    environment:
+      # Required, but NOT enforced with compose's ${VAR:?} here - that
+      # interpolates (and errors) for every service in the file whether or
+      # not its profile is active, which would break a plain default
+      # `docker compose up -d --build` for anyone who never touches this
+      # profile at all. Enforced instead in entrypoint.sh, at container
+      # start, which only ever runs when this profile is actually used.
+      SOCKS5_USER: ${SOCKS5_USER:-}
+      SOCKS5_PASSWORD: ${SOCKS5_PASSWORD:-}
+
   frontend:
     build:
       context: ./frontend

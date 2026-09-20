@@ -192,6 +192,50 @@ côté serveur (`backend/app/full_browser.py`) :
   première utilisation du mode complet, pour ne rien coûter tant que
   personne n'y touche.
 
+## Proxy SOCKS5 (bundled, optionnel) - un vrai navigateur, votre Debian en simple relais
+
+Le mode texte et le mode complet restent des solutions de rendu côté
+serveur (donc avec des compromis de fluidité/qualité assumés - voir
+ci-dessus). Si ce que vous voulez, c'est utiliser votre propre navigateur
+(Firefox, Chrome...) normalement, avec votre trafic qui sort simplement par
+ce Debian, un vrai proxy SOCKS5 est inclus (`microsocks`), **désactivé par
+défaut** :
+
+```bash
+# Dans .env :
+SOCKS5_USER=quelquechose
+SOCKS5_PASSWORD=un-mot-de-passe-solide
+
+docker compose --profile proxy up -d --build
+```
+
+Refuse de démarrer si `SOCKS5_USER`/`SOCKS5_PASSWORD` ne sont pas définis -
+jamais un relais ouvert. Le port `SOCKS5_PORT` (1080 par défaut) est publié
+sur l'hôte, comme le frontend - configurez ensuite n'importe quel appareil
+du réseau local pour l'utiliser :
+
+- **Firefox** : Paramètres → Général → Paramètres réseau → Configuration
+  manuelle du proxy → Hôte SOCKS = IP de votre Debian, Port = 1080,
+  SOCKS v5, cochez "Proxy DNS lors de l'utilisation de SOCKS v5" (sinon les
+  requêtes DNS partent en clair depuis votre appareil au lieu de passer par
+  le proxy).
+- **Chrome/Chromium** (pas de réglage réseau natif équivalent) : via une
+  extension comme "Proxy SwitchyOmega", ou en lançant Chrome avec
+  `--proxy-server="socks5://<ip>:1080"`.
+- **Système entier** (Linux/Windows/macOS) : réglages proxy SOCKS de l'OS -
+  fait alors transiter tout le trafic réseau de l'appareil, pas seulement
+  le navigateur.
+
+**Différence avec le mode complet/texte** : ici c'est réellement VOTRE
+navigateur qui s'exécute et rend les pages (vitesse et fidélité natives,
+aucune limite de compatibilité JS) - seul le trafic réseau transite par le
+Debian. Contrepartie : le site voit le vrai navigateur/OS de votre
+appareil (pas un fingerprint générique), et JS s'exécute directement chez
+vous plutôt que d'être tenu à distance dans un bac à sable - c'est un choix
+different du mode texte/complet, pas strictement plus sécurisé, juste plus
+rapide et plus fidèle. L'app "Navigateur" du bureau reste disponible à côté
+pour un accès rapide depuis un appareil qu'on ne veut pas reconfigurer.
+
 ## Session persistante du bureau
 
 À chaque déconnexion (et toutes les 45s en tâche de fond), l'état du bureau
@@ -451,6 +495,10 @@ le rester tant que vous n'avez pas conscience de ce qu'il implique :
   raisonnable sur une petite machine, et surveillez la RAM/CPU du conteneur
   `backend` si vous l'activez pour plusieurs comptes en parallèle.
 - `INTERNAL_PROXY_ALLOWLIST` est une liste blanche exacte de hostnames
-  (par défaut juste `roundcube`) : n'y ajoutez que des services de confiance
-  que vous avez vous-même déployés sur le réseau `internal`, jamais un nom
-  dérivé d'une entrée utilisateur.
+  (par défaut juste `snappymail`) : n'y ajoutez que des services de
+  confiance que vous avez vous-même déployés sur le réseau `internal`,
+  jamais un nom dérivé d'une entrée utilisateur.
+- Le proxy SOCKS5 (profil `proxy`) publie un port sur l'hôte, comme le
+  frontend : n'importe qui pouvant atteindre ce port ET connaissant
+  `SOCKS5_USER`/`SOCKS5_PASSWORD` peut faire sortir du trafic par ce Debian
+  - gardez ce mot de passe aussi solide que les autres secrets de `.env`.

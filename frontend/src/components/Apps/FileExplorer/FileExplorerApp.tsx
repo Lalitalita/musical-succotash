@@ -2,13 +2,26 @@ import { ChangeEvent, FormEvent, useCallback, useEffect, useRef, useState } from
 import { api, ApiError } from "../../../api/client";
 import { getFileCategory } from "../../../constants/icons";
 import { AppIconGlyph } from "../../IconPicker/AppIconGlyph";
+import { openContextMenu, type ContextMenuItem } from "../../../state/contextMenuStore";
+import {
+  useFileExplorerCategoriesStore,
+  type FileExplorerCategory,
+  type PinnedFolder,
+} from "../../../state/fileExplorerCategoriesStore";
 import { useFileTypeIcon } from "../../../state/fileTypeIconsStore";
+import { saveDesktopState } from "../../../state/persistence";
 import type { FileEntry, FileSource } from "../../../types";
 
-interface ContextMenuState {
-  x: number;
-  y: number;
-  entry: FileEntry;
+interface ExplorerTab {
+  id: string;
+  source: FileSource;
+  path: string;
+}
+
+let tabCounter = 0;
+
+function newTab(source: FileSource, path: string): ExplorerTab {
+  return { id: `tab-${Date.now()}-${tabCounter++}`, source, path };
 }
 
 function joinPath(base: string, name: string): string {
@@ -40,24 +53,100 @@ function FileRowIcon({ entry }: { entry: FileEntry }) {
   return <AppIconGlyph className="file-icon" icon={icon} />;
 }
 
+function tabLabel(tab: ExplorerTab): string {
+  if (!tab.path) return tab.source === "local" ? "Local" : "Partage SMB";
+  const segments = tab.path.split("/");
+  return segments[segments.length - 1] || (tab.source === "local" ? "Local" : "Partage SMB");
+}
+
+function Sidebar({
+  activeSource,
+  activePath,
+  onNavigate,
+}: {
+  activeSource: FileSource;
+  activePath: string;
+  onNavigate: (source: FileSource, path: string) => void;
+}) {
+  const categories = useFileExplorerCategoriesStore((s) => s.categories);
+  const unpinFolder = useFileExplorerCategoriesStore((s) => s.unpinFolder);
+
+  function unpin(category: FileExplorerCategory, folder: PinnedFolder) {
+    unpinFolder(category.id, folder.id);
+    saveDesktopState();
+  }
+
+  return (
+    <div className="file-explorer-sidebar">
+      <button
+        className={`sidebar-item ${activeSource === "local" && activePath === "" ? "active" : ""}`}
+        onClick={() => onNavigate("local", "")}
+      >
+        💾 Local
+      </button>
+      <button
+        className={`sidebar-item ${activeSource === "smb" && activePath === "" ? "active" : ""}`}
+        onClick={() => onNavigate("smb", "")}
+      >
+        🏠 Partage SMB
+      </button>
+
+      {categories.map((category) => (
+        <div key={category.id} className="sidebar-category">
+          <div className="sidebar-category-name">{category.name}</div>
+          {category.folders.length === 0 ? (
+            <div className="sidebar-category-empty">Vide</div>
+          ) : (
+            category.folders.map((folder) => (
+              <button
+                key={folder.id}
+                className={`sidebar-item pinned ${
+                  activeSource === folder.source && activePath === folder.path ? "active" : ""
+                }`}
+                onClick={() => onNavigate(folder.source, folder.path)}
+                onContextMenu={(e) =>
+                  openContextMenu(e, [
+                    {
+                      label: "Détacher",
+                      icon: "✕",
+                      danger: true,
+                      onSelect: () => unpin(category, folder),
+                    },
+                  ])
+                }
+              >
+                {folder.isDir ? "📁" : "📄"} {folder.label}
+              </button>
+            ))
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function FileExplorerApp() {
-  const [source, setSource] = useState<FileSource>("local");
-  const [paths, setPaths] = useState<Record<FileSource, string>>({ local: "", smb: "" });
+  const [tabs, setTabs] = useState<ExplorerTab[]>(() => [newTab("local", "")]);
+  const [activeTabId, setActiveTabId] = useState(() => tabs[0].id);
   const [entries, setEntries] = useState<FileEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [smbUnconfigured, setSmbUnconfigured] = useState(false);
   const [newFolderName, setNewFolderName] = useState<string | null>(null);
-  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const path = paths[source];
+  const activeTab = tabs.find((t) => t.id === activeTabId) || tabs[0];
+  const { source, path } = activeTab;
   // `api.get/post/del/upload` already prefix calls with "/api" (see
   // src/api/client.ts) - `base` must NOT repeat it, or every request 404s
   // on "/api/api/...". `directBase` is only for window.open(), which needs
   // the real path since it bypasses the api client entirely.
   const base = `/files/${source}`;
   const directBase = `/api/files/${source}`;
+
+  function updateActiveTab(patch: Partial<Pick<ExplorerTab, "source" | "path">>) {
+    setTabs((ts) => ts.map((t) => (t.id === activeTabId ? { ...t, ...patch } : t)));
+  }
 
   const load = useCallback(() => {
     setLoading(true);
@@ -83,15 +172,28 @@ export function FileExplorerApp() {
     load();
   }, [load]);
 
-  function switchSource(next: FileSource) {
-    setSource(next);
-    setContextMenu(null);
+  function navigate(nextSource: FileSource, nextPath: string) {
+    updateActiveTab({ source: nextSource, path: nextPath });
     setNewFolderName(null);
   }
 
   function goTo(next: string) {
-    setPaths((p) => ({ ...p, [source]: next }));
-    setContextMenu(null);
+    updateActiveTab({ path: next });
+  }
+
+  function addTab() {
+    const tab = newTab(source, path);
+    setTabs((ts) => [...ts, tab]);
+    setActiveTabId(tab.id);
+  }
+
+  function closeTab(id: string) {
+    setTabs((ts) => {
+      if (ts.length <= 1) return ts;
+      const remaining = ts.filter((t) => t.id !== id);
+      if (id === activeTabId) setActiveTabId(remaining[remaining.length - 1].id);
+      return remaining;
+    });
   }
 
   function openEntry(entry: FileEntry) {
@@ -105,11 +207,9 @@ export function FileExplorerApp() {
   function downloadEntry(entry: FileEntry) {
     const full = joinPath(path, entry.name);
     window.open(`${directBase}/download?path=${encodeURIComponent(full)}`, "_blank");
-    setContextMenu(null);
   }
 
   function deleteEntry(entry: FileEntry) {
-    setContextMenu(null);
     const full = joinPath(path, entry.name);
     const label = entry.is_dir ? "ce dossier (et son contenu)" : "ce fichier";
     if (!window.confirm(`Supprimer ${label} « ${entry.name} » ?`)) return;
@@ -117,6 +217,53 @@ export function FileExplorerApp() {
       .del(`${base}?path=${encodeURIComponent(full)}`)
       .then(() => load())
       .catch((e: unknown) => setError(e instanceof ApiError ? e.message : "Échec de la suppression."));
+  }
+
+  function buildRowMenu(entry: FileEntry): ContextMenuItem[] {
+    const items: ContextMenuItem[] = [];
+    if (!entry.is_dir) {
+      items.push({ label: "Télécharger", icon: "⬇", onSelect: () => downloadEntry(entry) });
+    }
+
+    const categories = useFileExplorerCategoriesStore.getState().categories;
+    const full = joinPath(path, entry.name);
+    const folder: Omit<PinnedFolder, "id"> = { label: entry.name, source, path: full, isDir: entry.is_dir };
+
+    categories.forEach((c, i) => {
+      items.push({
+        label: `Épingler dans « ${c.name} »`,
+        icon: "📌",
+        separatorBefore: i === 0,
+        onSelect: () => {
+          useFileExplorerCategoriesStore.getState().pinFolder(c.id, folder);
+          saveDesktopState();
+        },
+      });
+    });
+    items.push({
+      label: "Épingler dans une nouvelle catégorie...",
+      icon: "📌",
+      separatorBefore: categories.length === 0,
+      onSelect: () => {
+        const name = window.prompt("Nom de la nouvelle catégorie :");
+        if (!name || !name.trim()) return;
+        const category = useFileExplorerCategoriesStore.getState().addCategory(name);
+        if (category) {
+          useFileExplorerCategoriesStore.getState().pinFolder(category.id, folder);
+          saveDesktopState();
+        }
+      },
+    });
+
+    items.push({
+      label: "Supprimer",
+      icon: "🗑",
+      danger: true,
+      separatorBefore: true,
+      onSelect: () => deleteEntry(entry),
+    });
+
+    return items;
   }
 
   function handleUploadChange(e: ChangeEvent<HTMLInputElement>) {
@@ -148,114 +295,119 @@ export function FileExplorerApp() {
   const segments = path ? path.split("/") : [];
 
   return (
-    <div className="file-explorer" onClick={() => setContextMenu(null)}>
+    <div className="file-explorer">
       <div className="file-explorer-tabs">
-        <button
-          className={`file-source-tab ${source === "local" ? "active" : ""}`}
-          onClick={() => switchSource("local")}
-        >
-          💾 Local
-        </button>
-        <button className={`file-source-tab ${source === "smb" ? "active" : ""}`} onClick={() => switchSource("smb")}>
-          🏠 SMB
-        </button>
-      </div>
-
-      <div className="file-explorer-toolbar">
-        <button onClick={() => fileInputRef.current?.click()}>⬆ Uploader</button>
-        <input ref={fileInputRef} type="file" hidden onChange={handleUploadChange} />
-        <button onClick={() => setNewFolderName("")}>📁 Nouveau dossier</button>
-        <button onClick={() => load()}>⟳ Actualiser</button>
-      </div>
-
-      <div className="file-explorer-breadcrumb">
-        <button className="crumb" onClick={() => goTo("")}>
-          {source === "local" ? "Mes fichiers" : "Partage SMB"}
-        </button>
-        {segments.map((seg, i) => (
-          <span key={i}>
-            <span className="crumb-sep">/</span>
-            <button className="crumb" onClick={() => goTo(segments.slice(0, i + 1).join("/"))}>
-              {seg}
-            </button>
-          </span>
-        ))}
-      </div>
-
-      {newFolderName !== null && (
-        <form className="file-explorer-newfolder" onSubmit={submitNewFolder}>
-          <input
-            autoFocus
-            placeholder="Nom du dossier"
-            value={newFolderName}
-            onChange={(e) => setNewFolderName(e.target.value)}
-            onBlur={() => !newFolderName && setNewFolderName(null)}
-          />
-          <button type="submit">Créer</button>
-          <button type="button" onClick={() => setNewFolderName(null)}>
-            Annuler
-          </button>
-        </form>
-      )}
-
-      <div className="file-explorer-body">
-        {smbUnconfigured ? (
-          <div className="file-explorer-empty">
-            Partage SMB non configuré sur ce serveur. Définissez <code>SMB_HOST</code>, <code>SMB_SHARE</code> (et si
-            besoin <code>SMB_USERNAME</code> / <code>SMB_PASSWORD</code> / <code>SMB_DOMAIN</code>) dans la
-            configuration du backend pour l'activer.
+        {tabs.map((t) => (
+          <div
+            key={t.id}
+            className={`file-explorer-tab ${t.id === activeTabId ? "active" : ""}`}
+            onClick={() => setActiveTabId(t.id)}
+          >
+            <span>
+              {t.source === "local" ? "💾" : "🏠"} {tabLabel(t)}
+            </span>
+            {tabs.length > 1 && (
+              <button
+                className="file-explorer-tab-close"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  closeTab(t.id);
+                }}
+              >
+                ✕
+              </button>
+            )}
           </div>
-        ) : error ? (
-          <div className="file-explorer-empty">Erreur : {error}</div>
-        ) : loading ? (
-          <div className="file-explorer-empty">Chargement...</div>
-        ) : entries.length === 0 ? (
-          <div className="file-explorer-empty">Ce dossier est vide.</div>
-        ) : (
-          <table className="file-explorer-table">
-            <thead>
-              <tr>
-                <th>Nom</th>
-                <th>Taille</th>
-                <th>Modifié le</th>
-              </tr>
-            </thead>
-            <tbody>
-              {entries.map((entry) => (
-                <tr
-                  key={entry.name}
-                  onDoubleClick={() => openEntry(entry)}
-                  onContextMenu={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    setContextMenu({ x: e.clientX, y: e.clientY, entry });
-                  }}
-                >
-                  <td>
-                    <FileRowIcon entry={entry} />
-                    {entry.name}
-                  </td>
-                  <td>{formatSize(entry.size, entry.is_dir)}</td>
-                  <td>{formatDate(entry.mtime)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+        ))}
+        <button className="file-explorer-tab-add" onClick={addTab} title="Nouvel onglet">
+          +
+        </button>
       </div>
 
-      {contextMenu && (
-        <div
-          className="file-context-menu"
-          style={{ left: contextMenu.x, top: contextMenu.y }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          {!contextMenu.entry.is_dir && (
-            <button onClick={() => downloadEntry(contextMenu.entry)}>⬇ Télécharger</button>
+      <div className="file-explorer-main">
+        <Sidebar activeSource={source} activePath={path} onNavigate={navigate} />
+
+        <div className="file-explorer-panel">
+          <div className="file-explorer-toolbar">
+            <button onClick={() => fileInputRef.current?.click()}>⬆ Uploader</button>
+            <input ref={fileInputRef} type="file" hidden onChange={handleUploadChange} />
+            <button onClick={() => setNewFolderName("")}>📁 Nouveau dossier</button>
+            <button onClick={() => load()}>⟳ Actualiser</button>
+          </div>
+
+          <div className="file-explorer-breadcrumb">
+            <button className="crumb" onClick={() => goTo("")}>
+              {source === "local" ? "Mes fichiers" : "Partage SMB"}
+            </button>
+            {segments.map((seg, i) => (
+              <span key={i}>
+                <span className="crumb-sep">/</span>
+                <button className="crumb" onClick={() => goTo(segments.slice(0, i + 1).join("/"))}>
+                  {seg}
+                </button>
+              </span>
+            ))}
+          </div>
+
+          {newFolderName !== null && (
+            <form className="file-explorer-newfolder" onSubmit={submitNewFolder}>
+              <input
+                autoFocus
+                placeholder="Nom du dossier"
+                value={newFolderName}
+                onChange={(e) => setNewFolderName(e.target.value)}
+                onBlur={() => !newFolderName && setNewFolderName(null)}
+              />
+              <button type="submit">Créer</button>
+              <button type="button" onClick={() => setNewFolderName(null)}>
+                Annuler
+              </button>
+            </form>
           )}
-          <button onClick={() => deleteEntry(contextMenu.entry)}>🗑 Supprimer</button>
+
+          <div className="file-explorer-body">
+            {smbUnconfigured ? (
+              <div className="file-explorer-empty">
+                Partage SMB non configuré sur ce serveur. Définissez <code>SMB_HOST</code>, <code>SMB_SHARE</code>{" "}
+                (et si besoin <code>SMB_USERNAME</code> / <code>SMB_PASSWORD</code> / <code>SMB_DOMAIN</code>) dans
+                la configuration du backend pour l'activer.
+              </div>
+            ) : error ? (
+              <div className="file-explorer-empty">Erreur : {error}</div>
+            ) : loading ? (
+              <div className="file-explorer-empty">Chargement...</div>
+            ) : entries.length === 0 ? (
+              <div className="file-explorer-empty">Ce dossier est vide.</div>
+            ) : (
+              <table className="file-explorer-table">
+                <thead>
+                  <tr>
+                    <th>Nom</th>
+                    <th>Taille</th>
+                    <th>Modifié le</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {entries.map((entry) => (
+                    <tr
+                      key={entry.name}
+                      onDoubleClick={() => openEntry(entry)}
+                      onContextMenu={(e) => openContextMenu(e, buildRowMenu(entry))}
+                    >
+                      <td>
+                        <FileRowIcon entry={entry} />
+                        {entry.name}
+                      </td>
+                      <td>{formatSize(entry.size, entry.is_dir)}</td>
+                      <td>{formatDate(entry.mtime)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }

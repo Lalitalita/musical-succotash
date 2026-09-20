@@ -6,10 +6,11 @@ import { useSettingsStore } from "../../../state/settingsStore";
 import { useWindowStore } from "../../../state/windowStore";
 import { AboutPanel } from "./AboutPanel";
 import { AppsSettingsPanel } from "./AppsSettingsPanel";
+import { IconBankPanel } from "./IconBankPanel";
 import { UpdatePanel } from "./UpdatePanel";
 import { UsersPanel } from "./UsersPanel";
 
-type Tab = "compte" | "bureau" | "applications" | "utilisateurs" | "systeme" | "apropos";
+type Tab = "compte" | "bureau" | "applications" | "icones" | "utilisateurs" | "systeme" | "apropos";
 
 const WALLPAPERS = [
   { id: "default", label: "Aurore", css: "linear-gradient(160deg, #0f2027, #203a43 55%, #2c5364)" },
@@ -88,15 +89,17 @@ export function SettingsApp({ initialTab }: Props) {
       <div className="settings-tabs">
         {(
           [
-            ["compte", "Compte"],
-            ["bureau", "Bureau"],
-            ["applications", "Applications"],
-            ...(me?.is_admin ? ([["utilisateurs", "Utilisateurs"]] as [Tab, string][]) : []),
-            ["systeme", "Système"],
-            ["apropos", "À propos"],
-          ] as [Tab, string][]
-        ).map(([id, label]) => (
+            ["compte", "👤", "Compte"],
+            ["bureau", "🎨", "Bureau"],
+            ["applications", "🧩", "Applications"],
+            ["icones", "🖼️", "Banque d'icônes"],
+            ...(me?.is_admin ? ([["utilisateurs", "👥", "Utilisateurs"]] as [Tab, string, string][]) : []),
+            ["systeme", "⚙️", "Système"],
+            ["apropos", "ℹ️", "À propos"],
+          ] as [Tab, string, string][]
+        ).map(([id, tabIcon, label]) => (
           <button key={id} className={`settings-tab ${tab === id ? "active" : ""}`} onClick={() => setTab(id)}>
+            <span className="settings-tab-icon">{tabIcon}</span>
             {label}
           </button>
         ))}
@@ -206,6 +209,8 @@ export function SettingsApp({ initialTab }: Props) {
         )}
 
         {tab === "applications" && <AppsSettingsPanel />}
+
+        {tab === "icones" && <IconBankPanel />}
 
         {tab === "utilisateurs" && me?.is_admin && <UsersPanel />}
 

@@ -1,6 +1,9 @@
 import { AppIconGlyph } from "../IconPicker/AppIconGlyph";
 import { useAppIcon } from "../../state/appIconsStore";
 import { useAuthStore } from "../../state/authStore";
+import { openContextMenu } from "../../state/contextMenuStore";
+import { saveDesktopState } from "../../state/persistence";
+import { usePinnedAppsStore } from "../../state/pinnedAppsStore";
 import { useSettingsStore } from "../../state/settingsStore";
 import { useWindowStore } from "../../state/windowStore";
 import { APP_LABELS } from "../../constants/icons";
@@ -22,15 +25,39 @@ function StartTile({
   onClick,
   disabled,
   title,
+  pinnable,
 }: {
   appId: AppId | "mail" | "calendar";
   onClick: () => void;
   disabled?: boolean;
   title?: string;
+  pinnable?: AppId;
 }) {
   const icon = useAppIcon(appId);
+  const pinned = usePinnedAppsStore((s) => (pinnable ? s.pinned.includes(pinnable) : false));
   return (
-    <button className="start-tile" onClick={onClick} disabled={disabled} title={title}>
+    <button
+      className="start-tile"
+      onClick={onClick}
+      disabled={disabled}
+      title={title}
+      onContextMenu={
+        pinnable
+          ? (e) =>
+              openContextMenu(e, [
+                {
+                  label: pinned ? "Détacher de la barre des tâches" : "Épingler à la barre des tâches",
+                  icon: "📌",
+                  onSelect: () => {
+                    if (pinned) usePinnedAppsStore.getState().unpin(pinnable);
+                    else usePinnedAppsStore.getState().pin(pinnable);
+                    saveDesktopState();
+                  },
+                },
+              ])
+          : undefined
+      }
+    >
       <AppIconGlyph className="icon-glyph" icon={icon} />
       {APP_LABELS[appId]}
     </button>
@@ -64,7 +91,7 @@ export function StartMenu({ onClose }: Props) {
       <h4>Applications épinglées</h4>
       <div className="start-menu-grid">
         {APPS.filter((a) => !a.adminOnly || me?.is_admin).map((a) => (
-          <StartTile key={a.id} appId={a.id} onClick={() => launch(a.id, APP_LABELS[a.id])} />
+          <StartTile key={a.id} appId={a.id} pinnable={a.id} onClick={() => launch(a.id, APP_LABELS[a.id])} />
         ))}
         <StartTile
           appId="mail"

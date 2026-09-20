@@ -1,10 +1,13 @@
 import { api, ApiError } from "../api/client";
 import type { AppMetaId, FileTypeCategory } from "../constants/icons";
-import { DEFAULT_SETTINGS, type BrowserTab, type DesktopItem, type DesktopSettings, type WindowInstance } from "../types";
+import { DEFAULT_SETTINGS, type AppId, type BrowserTab, type DesktopItem, type DesktopSettings, type WindowInstance } from "../types";
 import { type IconOverride, useAppIconsStore } from "./appIconsStore";
 import { useBrowserStore } from "./browserStore";
 import { useDesktopItemsStore } from "./desktopItemsStore";
+import { useFileExplorerCategoriesStore, type FileExplorerCategory } from "./fileExplorerCategoriesStore";
 import { useFileTypeIconsStore } from "./fileTypeIconsStore";
+import { type BankIcon, useIconBankStore } from "./iconBankStore";
+import { usePinnedAppsStore } from "./pinnedAppsStore";
 import { useSettingsStore } from "./settingsStore";
 import { useWindowStore } from "./windowStore";
 
@@ -15,6 +18,9 @@ interface DesktopBlob {
   desktopItems: DesktopItem[];
   appIcons: Partial<Record<AppMetaId, IconOverride>>;
   fileTypeIcons: Partial<Record<FileTypeCategory, IconOverride>>;
+  pinnedApps: AppId[];
+  customIcons: BankIcon[];
+  fileExplorerCategories: FileExplorerCategory[];
 }
 
 export function collectDesktopState(): DesktopBlob {
@@ -37,6 +43,9 @@ export function collectDesktopState(): DesktopBlob {
     desktopItems: useDesktopItemsStore.getState().items,
     appIcons: useAppIconsStore.getState().overrides,
     fileTypeIcons: useFileTypeIconsStore.getState().overrides,
+    pinnedApps: usePinnedAppsStore.getState().pinned,
+    customIcons: useIconBankStore.getState().customIcons,
+    fileExplorerCategories: useFileExplorerCategoriesStore.getState().categories,
   };
 }
 
@@ -70,6 +79,15 @@ export async function restoreDesktopState(): Promise<void> {
     }
     if (state.fileTypeIcons) {
       useFileTypeIconsStore.getState().hydrate(state.fileTypeIcons);
+    }
+    if (Array.isArray(state.pinnedApps)) {
+      usePinnedAppsStore.getState().hydrate(state.pinnedApps);
+    }
+    if (Array.isArray(state.customIcons)) {
+      useIconBankStore.getState().hydrate(state.customIcons);
+    }
+    if (Array.isArray(state.fileExplorerCategories)) {
+      useFileExplorerCategoriesStore.getState().hydrate(state.fileExplorerCategories);
     }
   } catch (e) {
     if (!(e instanceof ApiError)) throw e;

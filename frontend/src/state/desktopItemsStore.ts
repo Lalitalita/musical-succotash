@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import type { IconOverride } from "./appIconsStore";
 import type { DesktopItem } from "../types";
 
 interface DesktopItemsState {
@@ -6,7 +7,7 @@ interface DesktopItemsState {
   add: (item: Omit<DesktopItem, "id">) => void;
   remove: (id: string) => void;
   move: (id: string, x: number, y: number) => void;
-  setIcon: (id: string, iconUrl: string) => void;
+  setIcon: (id: string, value: IconOverride) => void;
   hydrate: (items: DesktopItem[]) => void;
 }
 
@@ -24,7 +25,12 @@ export const useDesktopItemsStore = create<DesktopItemsState>((set, get) => ({
   move: (id, x, y) =>
     set({ items: get().items.map((i) => (i.id === id ? { ...i, x, y } : i)) }),
 
-  setIcon: (id, iconUrl) => set({ items: get().items.map((i) => (i.id === id ? { ...i, iconUrl } : i)) }),
+  setIcon: (id, value) =>
+    set({
+      items: get().items.map((i) =>
+        i.id === id ? { ...i, icon: value.icon ?? i.icon, iconUrl: value.iconUrl } : i
+      ),
+    }),
 
   hydrate: (items) => set({ items: Array.isArray(items) ? items : [] }),
 }));
