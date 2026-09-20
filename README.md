@@ -153,12 +153,17 @@ resteront cassés ou illisibles. Pour ces cas, chaque onglet a un bouton
 côté serveur (`backend/app/full_browser.py`) :
 
 - Chromium tourne en mode **normal** (pas headless), rendu dans un
-  framebuffer virtuel (`Xvfb`, démarré par l'entrée du conteneur backend -
-  voir `xvfb-run` dans `backend/Dockerfile`) : rien n'est jamais réellement
-  affiché nulle part, mais plusieurs sites (Google en tête) détectent et
-  bloquent activement Chromium headless ("this browser may not be secure"),
-  et tourner en mode normal referme cet écart en plus des correctifs déjà
-  posés (user-agent standard, `navigator.webdriver` masqué).
+  framebuffer virtuel (`Xvfb`, démarré par `backend/entrypoint.sh` avant
+  uvicorn) : rien n'est jamais réellement affiché nulle part, mais
+  plusieurs sites (Google en tête) détectent et bloquent activement
+  Chromium headless ("this browser may not be secure"), et tourner en
+  mode normal referme cet écart en plus des correctifs déjà posés
+  (user-agent standard, `navigator.webdriver` masqué). L'entrée démarre
+  Xvfb elle-même et attend que sa socket X11 apparaisse plutôt que de
+  passer par `xvfb-run` : sa poignée de main "attends que Xvfb signale
+  qu'il est prêt" dépend d'un signal qui se perd facilement dans
+  l'espace de noms de processus de Docker et peut rester bloquée
+  indéfiniment sans jamais échouer.
 
 - Le rendu est diffusé au navigateur via WebSocket (`/api/browser/full/ws`)
   en utilisant le screencast natif du protocole Chrome DevTools
