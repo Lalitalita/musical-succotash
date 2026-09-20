@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   APP_LABELS,
   DEFAULT_FILE_TYPE_ICONS,
@@ -322,9 +322,17 @@ function FileTypeIconRow({
   );
 }
 
-export function AppsSettingsPanel() {
-  const [selected, setSelected] = useState<AppMetaId | null>(null);
+interface Props {
+  initialAppId?: AppMetaId;
+}
+
+export function AppsSettingsPanel({ initialAppId }: Props) {
+  const [selected, setSelected] = useState<AppMetaId | null>(initialAppId ?? null);
   const { me } = useAuthStore();
+
+  useEffect(() => {
+    if (initialAppId) setSelected(initialAppId);
+  }, [initialAppId]);
 
   const appIds: AppMetaId[] = [
     "browser",

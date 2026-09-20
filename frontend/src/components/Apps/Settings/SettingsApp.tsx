@@ -1,5 +1,6 @@
 import { ChangeEvent, useEffect, useRef, useState } from "react";
 import { api } from "../../../api/client";
+import type { AppMetaId } from "../../../constants/icons";
 import { saveDesktopState } from "../../../state/persistence";
 import { useAuthStore } from "../../../state/authStore";
 import { useSettingsStore } from "../../../state/settingsStore";
@@ -23,11 +24,21 @@ const WALLPAPERS = [
 const ACCENTS = ["#4cc2ff", "#ff6b9d", "#7bd389", "#ffb454", "#c792ea", "#ff5c5c"];
 
 interface Props {
+  /** A plain tab id ("bureau"), or "applications:<appId>" to also jump
+   * straight to that app's detail panel within the Applications tab (used
+   * by the File Explorer's own "Paramètres" button). */
   initialTab?: string;
 }
 
+function parseInitialTab(initialTab?: string): { tab?: Tab; appId?: AppMetaId } {
+  if (!initialTab) return {};
+  const [tab, appId] = initialTab.split(":");
+  return { tab: tab as Tab, appId: appId as AppMetaId | undefined };
+}
+
 export function SettingsApp({ initialTab }: Props) {
-  const [tab, setTab] = useState<Tab>((initialTab as Tab) || "compte");
+  const [tab, setTab] = useState<Tab>(parseInitialTab(initialTab).tab || "compte");
+  const [appDetail, setAppDetail] = useState<AppMetaId | undefined>(parseInitialTab(initialTab).appId);
   const { me, updateProfile } = useAuthStore();
   const settings = useSettingsStore();
   const [displayName, setDisplayName] = useState(me?.display_name || "");
@@ -39,7 +50,10 @@ export function SettingsApp({ initialTab }: Props) {
   const wallpaperFileInput = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (initialTab) setTab(initialTab as Tab);
+    if (!initialTab) return;
+    const parsed = parseInitialTab(initialTab);
+    if (parsed.tab) setTab(parsed.tab);
+    setAppDetail(parsed.appId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialTab]);
 
@@ -208,7 +222,7 @@ export function SettingsApp({ initialTab }: Props) {
           </div>
         )}
 
-        {tab === "applications" && <AppsSettingsPanel />}
+        {tab === "applications" && <AppsSettingsPanel initialAppId={appDetail} />}
 
         {tab === "icones" && <IconBankPanel />}
 

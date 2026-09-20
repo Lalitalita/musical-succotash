@@ -656,7 +656,8 @@ table.attempts-table td {
 
 /* ---------------- Browser tabs & bookmarks ---------------- */
 
-.browser-tabs {
+.browser-tabs,
+.file-explorer-tabbar-tabs {
   display: flex;
   align-items: center;
   gap: 4px;
@@ -666,7 +667,8 @@ table.attempts-table td {
   overflow-x: auto;
 }
 
-.browser-tab {
+.browser-tab,
+.file-explorer-tabbar-tab {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -681,29 +683,35 @@ table.attempts-table td {
   flex-shrink: 0;
 }
 
-.browser-tab.active {
+.browser-tab.active,
+.file-explorer-tabbar-tab.active {
   background: rgba(255, 255, 255, 0.12);
   color: var(--text);
 }
 
-.browser-tab-title {
+.browser-tab-title,
+.file-explorer-tabbar-title {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.browser-tab-close {
+.browser-tab-close,
+.file-explorer-tabbar-close {
   opacity: 0.6;
   border-radius: 3px;
   padding: 0 3px;
 }
 
-.browser-tab-close:hover {
+.browser-tab-close:hover,
+.file-explorer-tabbar-close:hover {
   opacity: 1;
   background: rgba(255, 255, 255, 0.15);
 }
 
-.browser-tab-new {
+.browser-tab-new,
+.file-explorer-tabbar-new,
+.file-explorer-tabbar-settings {
   border: none;
   background: transparent;
   color: var(--text-dim);
@@ -715,9 +723,16 @@ table.attempts-table td {
   flex-shrink: 0;
 }
 
-.browser-tab-new:hover {
+.browser-tab-new:hover,
+.file-explorer-tabbar-new:hover,
+.file-explorer-tabbar-settings:hover {
   background: var(--surface-light);
   color: var(--text);
+}
+
+.file-explorer-tabbar-settings {
+  margin-left: auto;
+  font-size: 13px;
 }
 
 .browser-icon-btn {
@@ -841,13 +856,6 @@ table.attempts-table td {
   overflow: hidden;
   outline: none;
   cursor: default;
-}
-
-.remote-frame-surface img {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  user-select: none;
 }
 
 .remote-frame-status {
@@ -1891,71 +1899,6 @@ img.app-icon-preview {
   flex-direction: column;
   height: 100%;
   position: relative;
-}
-
-.file-explorer-tabs {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  padding: 6px 8px 0;
-  flex-shrink: 0;
-}
-
-.file-explorer-tab {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 8px 6px 14px;
-  border-radius: 8px 8px 0 0;
-  border: 1px solid var(--border);
-  border-bottom: none;
-  background: rgba(255, 255, 255, 0.04);
-  color: var(--text-dim);
-  cursor: pointer;
-  font-size: 12px;
-  max-width: 180px;
-}
-
-.file-explorer-tab span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.file-explorer-tab.active {
-  background: var(--surface-light);
-  color: var(--text);
-}
-
-.file-explorer-tab-close {
-  background: none;
-  border: none;
-  color: var(--text-dim);
-  cursor: pointer;
-  font-size: 11px;
-  padding: 2px 4px;
-  border-radius: 4px;
-  flex-shrink: 0;
-}
-
-.file-explorer-tab-close:hover {
-  background: rgba(255, 255, 255, 0.12);
-  color: var(--text);
-}
-
-.file-explorer-tab-add {
-  padding: 6px 10px;
-  border: none;
-  background: none;
-  color: var(--text-dim);
-  cursor: pointer;
-  font-size: 14px;
-  border-radius: 6px;
-}
-
-.file-explorer-tab-add:hover {
-  background: var(--surface-light);
-  color: var(--text);
 }
 
 .file-explorer-main {

@@ -9,19 +9,17 @@ FROM python:3.12-slim-bookworm
 # self-update feature (see app/updater.py) - harmless if unused, since it
 # only does anything when the Docker socket is actually mounted in
 # (docker-compose.selfupdate.yml).
-# xvfb: full-browser mode launches Chromium in normal (headed) mode into
-# this virtual display instead of --headless - several sites (Google's
-# login flow being the most notorious) actively fingerprint headless
-# Chrome and refuse to sign in on it, and a handful of internal differences
-# between headless and headed rendering remain even with "the new headless
-# mode". Nothing is ever actually displayed anywhere; it's a framebuffer
-# that only exists so Chromium believes it has a real screen. Started
-# directly by entrypoint.sh, not via the xvfb-run wrapper: xvfb-run's
-# "wait for Xvfb to signal it's ready" handshake relies on a SIGUSR1
-# reaching its parent process, which is unreliable enough inside Docker's
-# process namespace that it can hang forever with no error at all.
+# xvfb + x11vnc: full-browser mode gives every open tab its own private
+# virtual display (Xvfb) with a real, headed Chromium attached to it
+# (several sites, Google's login flow being the most notorious, actively
+# fingerprint headless Chrome and refuse to sign in on it) and streams that
+# display to the client over VNC (x11vnc) - see app/full_browser.py and
+# routers/full_browser.py. Both are launched dynamically per tab by the
+# backend itself, not started here; nothing is ever actually displayed
+# anywhere, and x11vnc only ever binds to localhost, never leaving the
+# container except through the backend's own authenticated WebSocket.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        libxml2 libxslt1.1 curl git docker.io xvfb \
+        libxml2 libxslt1.1 curl git docker.io xvfb x11vnc \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

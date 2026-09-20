@@ -1,29 +1,35 @@
-"""WebSocket endpoint for full-browser mode: streams JPEG frames of a
-server-side headless Chromium tab via the Chrome DevTools Protocol's native
-screencast (Page.startScreencast) and applies input events sent back by the
-client. See app/full_browser.py for the session manager and SSRF guard.
+"""Full-browser mode transport: bridges the client's WebSocket straight
+through to the x11vnc server backing this tab's private Chromium session
+(see app/full_browser.py), and exposes small REST endpoints for the
+controls (address bar, back/forward/reload) that a raw VNC feed has no room
+for.
 
-CDP's screencast pushes a new frame only when the page actually changes,
-and Chrome will not send the next one until the current one is
-acknowledged (Page.screencastFrameAck) - unlike polling page.screenshot()
-on a fixed timer, this gives free backpressure (a slow client/network
-naturally throttles Chrome's own encoder instead of queuing up screenshot
-calls behind it) and near-zero cost while the page is actually idle.
+The WebSocket carries nothing but the RFB protocol's own bytes verbatim in
+both directions - no custom framing, no JSON envelope. The browser's own
+noVNC client (frontend/src/components/Apps/BrowserApp/RemoteFrame.tsx)
+speaks RFB directly to it, which is what gives this approach mouse/
+keyboard/clipboard handling, damage-aware updates and reconnection for free
+instead of hand-rolling all of that on top of screenshot polling.
 """
 import asyncio
-import base64
 import contextlib
 import logging
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, status
+from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, status
+from pydantic import BaseModel
 
 from app.database import SessionLocal
+from app.deps import get_current_user
 from app.full_browser import NotOwnerError, SessionLimitError, manager
 from app.models import User
 from app.security import decode_token
 
 router = APIRouter(prefix="/api/browser/full", tags=["browser-full"])
 logger = logging.getLogger("webdesktop.full_browser.ws")
+
+
+class NavigatePayload(BaseModel):
+    url: str
 
 
 def _user_from_ws_cookies(websocket: WebSocket) -> User | None:
@@ -40,40 +46,6 @@ def _user_from_ws_cookies(websocket: WebSocket) -> User | None:
         db.close()
 
 
-async def _apply_input(page, msg: dict) -> None:
-    kind = msg.get("type")
-    try:
-        if kind == "navigate" and msg.get("url"):
-            await page.goto(msg["url"], wait_until="domcontentloaded", timeout=15000)
-        elif kind == "mousemove":
-            await page.mouse.move(msg["x"], msg["y"])
-        elif kind == "mousedown":
-            await page.mouse.move(msg["x"], msg["y"])
-            await page.mouse.down(button=msg.get("button", "left"))
-        elif kind == "mouseup":
-            await page.mouse.up(button=msg.get("button", "left"))
-        elif kind == "wheel":
-            await page.mouse.wheel(msg.get("dx", 0), msg.get("dy", 0))
-        elif kind == "keydown":
-            await page.keyboard.down(msg["key"])
-        elif kind == "keyup":
-            await page.keyboard.up(msg["key"])
-        elif kind == "text":
-            await page.keyboard.insert_text(msg["text"])
-        elif kind == "paste":
-            await page.keyboard.insert_text(msg.get("text", ""))
-        elif kind == "resize":
-            await page.set_viewport_size({"width": int(msg["width"]), "height": int(msg["height"])})
-        elif kind == "back":
-            await page.go_back()
-        elif kind == "forward":
-            await page.go_forward()
-        elif kind == "reload":
-            await page.reload()
-    except Exception as exc:  # noqa: BLE001 - never let one bad input event kill the session
-        logger.debug("Full-browser input %r failed: %s", kind, exc)
-
-
 @router.websocket("/ws")
 async def full_browser_ws(websocket: WebSocket, tab_id: str, url: str | None = None):
     user = _user_from_ws_cookies(websocket)
@@ -86,89 +58,112 @@ async def full_browser_ws(websocket: WebSocket, tab_id: str, url: str | None = N
     try:
         session = await manager.get_or_create(tab_id, user.id)
     except SessionLimitError:
-        await websocket.send_json(
-            {"type": "error", "message": "Trop de sessions en mode complet actives. Fermez-en une autre d'abord."}
-        )
-        await websocket.close()
+        await websocket.close(code=status.WS_1013_TRY_AGAIN_LATER)
         return
     except NotOwnerError:
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         return
-    except RuntimeError as exc:
-        await websocket.send_json({"type": "error", "message": str(exc)})
-        await websocket.close()
+    except RuntimeError:
+        await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
         return
 
-    page = session.page
+    if url and session.page.url in ("about:blank", ""):
+        with contextlib.suppress(Exception):
+            await session.page.goto(url, wait_until="domcontentloaded", timeout=15000)
 
-    if url and page.url in ("about:blank", ""):
-        try:
-            await page.goto(url, wait_until="domcontentloaded", timeout=15000)
-        except Exception as exc:  # noqa: BLE001
-            await websocket.send_json({"type": "error", "message": f"Navigation impossible: {exc}"})
-
-    stop_event = asyncio.Event()
-    cdp = await page.context.new_cdp_session(page)
-
-    async def on_screencast_frame(cdp_params: dict) -> None:
-        try:
-            await websocket.send_bytes(base64.b64decode(cdp_params["data"]))
-        except Exception:  # noqa: BLE001
-            stop_event.set()
-        finally:
-            with contextlib.suppress(Exception):
-                await cdp.send("Page.screencastFrameAck", {"sessionId": cdp_params["sessionId"]})
-
-    cdp.on("Page.screencastFrame", lambda p: asyncio.create_task(on_screencast_frame(p)))
-    await cdp.send(
-        "Page.startScreencast",
-        {"format": "jpeg", "quality": 65, "maxWidth": 1600, "maxHeight": 1000, "everyNthFrame": 1},
-    )
-
-    async def url_loop():
-        # Screencast frames carry no metadata, so the title/address bar
-        # needs its own (much cheaper than a screenshot) polling loop.
-        last_seen = None
-        while not stop_event.is_set():
-            try:
-                if page.url != last_seen:
-                    last_seen = page.url
-                    await websocket.send_json({"type": "url", "url": page.url, "title": await page.title()})
-            except Exception:  # noqa: BLE001
-                break
-            await asyncio.sleep(0.5)
-
-    async def receive_loop():
-        while True:
-            msg = await websocket.receive_json()
-            session.touch()
-            if msg.get("type") == "copy":
-                # The remote page's own selected text has to be read back
-                # over the wire and written into the LOCAL clipboard - the
-                # site's JS/DOM selection never reaches this machine
-                # otherwise, only screenshots do.
-                try:
-                    text = await page.evaluate("() => window.getSelection().toString()")
-                except Exception:  # noqa: BLE001
-                    text = ""
-                if text:
-                    await websocket.send_json({"type": "clipboard", "text": text})
-                continue
-            await _apply_input(page, msg)
-
-    url_task = asyncio.create_task(url_loop())
     try:
-        await receive_loop()
+        reader, writer = await asyncio.open_connection("127.0.0.1", session.vnc_port)
+    except OSError:
+        await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
+        return
+
+    async def ws_to_vnc():
+        while True:
+            data = await websocket.receive_bytes()
+            writer.write(data)
+            await writer.drain()
+
+    async def vnc_to_ws():
+        while True:
+            data = await reader.read(65536)
+            if not data:
+                break
+            await websocket.send_bytes(data)
+
+    session.touch()
+    tasks = [asyncio.create_task(ws_to_vnc()), asyncio.create_task(vnc_to_ws())]
+    try:
+        await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
     except WebSocketDisconnect:
         pass
     except Exception as exc:  # noqa: BLE001
-        logger.debug("Full-browser ws receive loop ended: %s", exc)
+        logger.debug("Full-browser ws relay ended: %s", exc)
     finally:
-        stop_event.set()
-        url_task.cancel()
-        with contextlib.suppress(asyncio.CancelledError):
-            await url_task
+        for t in tasks:
+            t.cancel()
+        for t in tasks:
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await t
+        writer.close()
         with contextlib.suppress(Exception):
-            await cdp.send("Page.stopScreencast")
-        with contextlib.suppress(Exception):
-            await cdp.detach()
+            await writer.wait_closed()
+
+
+def _get_owned_session(tab_id: str, user: User):
+    session = manager.get(tab_id, user.id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session de mode complet introuvable.")
+    session.touch()
+    return session
+
+
+@router.get("/{tab_id}/meta")
+async def get_meta(tab_id: str, user: User = Depends(get_current_user)):
+    session = _get_owned_session(tab_id, user)
+    try:
+        title = await session.page.title()
+    except Exception:  # noqa: BLE001
+        title = ""
+    return {"url": session.page.url, "title": title}
+
+
+@router.post("/{tab_id}/navigate")
+async def navigate(tab_id: str, payload: NavigatePayload, user: User = Depends(get_current_user)):
+    session = _get_owned_session(tab_id, user)
+    try:
+        await session.page.goto(payload.url, wait_until="domcontentloaded", timeout=15000)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"Navigation impossible: {exc}") from exc
+    return {"ok": True}
+
+
+@router.post("/{tab_id}/back")
+async def go_back(tab_id: str, user: User = Depends(get_current_user)):
+    session = _get_owned_session(tab_id, user)
+    with contextlib.suppress(Exception):
+        await session.page.go_back()
+    return {"ok": True}
+
+
+@router.post("/{tab_id}/forward")
+async def go_forward(tab_id: str, user: User = Depends(get_current_user)):
+    session = _get_owned_session(tab_id, user)
+    with contextlib.suppress(Exception):
+        await session.page.go_forward()
+    return {"ok": True}
+
+
+@router.post("/{tab_id}/reload")
+async def reload_page(tab_id: str, user: User = Depends(get_current_user)):
+    session = _get_owned_session(tab_id, user)
+    with contextlib.suppress(Exception):
+        await session.page.reload()
+    return {"ok": True}
+
+
+@router.delete("/{tab_id}")
+async def close_tab(tab_id: str, user: User = Depends(get_current_user)):
+    session = manager.get(tab_id, user.id)
+    if session:
+        await manager.close_tab(tab_id)
+    return {"ok": True}

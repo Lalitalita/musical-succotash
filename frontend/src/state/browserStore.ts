@@ -1,6 +1,17 @@
 import { create } from "zustand";
+import { api } from "../api/client";
 import type { BrowserTab, BrowserTabMode } from "../types";
 import { normalizeUrl, viewSrc } from "../utils/url";
+
+/** Full-browser mode gives every tab in "full" mode its own private
+ * Chromium+Xvfb+x11vnc trio on the backend (see app/full_browser.py) - much
+ * heavier than the old shared-browser design, so it's worth eagerly
+ * releasing it as soon as we know the tab no longer needs it instead of
+ * waiting out the idle timeout. Best-effort: losing this ping just means
+ * the backend's own idle cleanup reclaims it a little later instead. */
+function releaseFullBrowserSession(tabId: string): void {
+  api.del(`/browser/full/${tabId}`).catch(() => {});
+}
 
 interface BrowserWindowState {
   tabs: BrowserTab[];
@@ -65,6 +76,7 @@ export const useBrowserStore = create<BrowserStoreState>((set, get) => ({
     set((s) => {
       const win = s.byWindow[windowId];
       if (!win) return s;
+      if (win.tabs.find((t) => t.id === tabId)?.mode === "full") releaseFullBrowserSession(tabId);
       const remaining = win.tabs.filter((t) => t.id !== tabId);
       if (remaining.length === 0) {
         const fresh = makeTab();
@@ -121,6 +133,10 @@ export const useBrowserStore = create<BrowserStoreState>((set, get) => ({
   },
 
   setMode: (windowId, tabId, mode) => {
+    const win = get().byWindow[windowId];
+    const current = win?.tabs.find((t) => t.id === tabId);
+    if (current?.mode === "full" && mode !== "full") releaseFullBrowserSession(tabId);
+
     set((s) => {
       const win = s.byWindow[windowId];
       if (!win) return s;

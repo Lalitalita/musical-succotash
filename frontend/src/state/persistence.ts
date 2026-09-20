@@ -5,6 +5,7 @@ import { type IconOverride, useAppIconsStore } from "./appIconsStore";
 import { useBrowserStore } from "./browserStore";
 import { useDesktopItemsStore } from "./desktopItemsStore";
 import { useFileExplorerCategoriesStore, type FileExplorerCategory } from "./fileExplorerCategoriesStore";
+import { useFileExplorerStore, type ExplorerTab } from "./fileExplorerStore";
 import { useFileTypeIconsStore } from "./fileTypeIconsStore";
 import { type BankIcon, useIconBankStore } from "./iconBankStore";
 import { usePinnedAppsStore } from "./pinnedAppsStore";
@@ -21,6 +22,7 @@ interface DesktopBlob {
   pinnedApps: AppId[];
   customIcons: BankIcon[];
   fileExplorerCategories: FileExplorerCategory[];
+  fileExplorerTabs: Record<string, { tabs: ExplorerTab[]; activeTabId: string }>;
 }
 
 export function collectDesktopState(): DesktopBlob {
@@ -28,10 +30,13 @@ export function collectDesktopState(): DesktopBlob {
   const openIds = new Set(windows.map((w) => w.id));
   const allTabs = useBrowserStore.getState().byWindow;
   const browserTabs = Object.fromEntries(Object.entries(allTabs).filter(([id]) => openIds.has(id)));
+  const allExplorerTabs = useFileExplorerStore.getState().byWindow;
+  const fileExplorerTabs = Object.fromEntries(Object.entries(allExplorerTabs).filter(([id]) => openIds.has(id)));
 
   return {
     windows,
     browserTabs,
+    fileExplorerTabs,
     settings: {
       wallpaper: useSettingsStore.getState().wallpaper,
       wallpaperColor: useSettingsStore.getState().wallpaperColor,
@@ -67,6 +72,9 @@ export async function restoreDesktopState(): Promise<void> {
     }
     if (state.browserTabs && typeof state.browserTabs === "object") {
       useBrowserStore.getState().hydrate(state.browserTabs);
+    }
+    if (state.fileExplorerTabs && typeof state.fileExplorerTabs === "object") {
+      useFileExplorerStore.getState().hydrate(state.fileExplorerTabs);
     }
     if (state.settings) {
       useSettingsStore.getState().hydrate({ ...DEFAULT_SETTINGS, ...state.settings });

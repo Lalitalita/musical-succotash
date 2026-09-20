@@ -82,7 +82,12 @@ export function Window({ win, children, titlebarContent }: Props) {
         onPointerUp={onTitlePointerUp}
         onDoubleClick={(e) => {
           const target = e.target as HTMLElement;
-          if (!target.closest(".browser-tab, .browser-tab-new")) toggleMaximize(win.id);
+          if (
+            !target.closest(
+              ".browser-tab, .browser-tab-new, .file-explorer-tabbar-tab, .file-explorer-tabbar-new, .file-explorer-tabbar-settings"
+            )
+          )
+            toggleMaximize(win.id);
         }}
         onContextMenu={(e) =>
           openContextMenu(e, [

@@ -144,62 +144,66 @@ HTML chargé quand on change d'onglet, avec un bouton recharger par onglet) et
 une barre de favoris personnels (`/api/bookmarks`, avec icône personnalisable
 par URL d'image).
 
-### Mode complet (Playwright) - au cas par cas
+### Mode complet (Chromium + VNC) - au cas par cas, zéro configuration côté client
 
 Le mode texte n'exécute jamais de JavaScript : les sites qui en ont besoin
 pour s'afficher (SPA modernes type Instagram, webmail avec skin JS...)
 resteront cassés ou illisibles. Pour ces cas, chaque onglet a un bouton
-**Mode texte / Mode complet** qui bascule vers un vrai onglet Chromium piloté
-côté serveur (`backend/app/full_browser.py`) :
+**Mode texte / Mode complet** qui bascule vers un vrai Chromium isolé piloté
+côté serveur (`backend/app/full_browser.py`), diffusé au navigateur du
+client par VNC - le poste client n'a **rien à installer ni à configurer** :
+il ouvre cette appli dans son navigateur habituel, comme n'importe quelle
+autre page.
 
-- Chromium tourne en mode **normal** (pas headless), rendu dans un
-  framebuffer virtuel (`Xvfb`, démarré par `backend/entrypoint.sh` avant
-  uvicorn) : rien n'est jamais réellement affiché nulle part, mais
-  plusieurs sites (Google en tête) détectent et bloquent activement
-  Chromium headless ("this browser may not be secure"), et tourner en
-  mode normal referme cet écart en plus des correctifs déjà posés
-  (user-agent standard, `navigator.webdriver` masqué). L'entrée démarre
-  Xvfb elle-même et attend que sa socket X11 apparaisse plutôt que de
-  passer par `xvfb-run` : sa poignée de main "attends que Xvfb signale
-  qu'il est prêt" dépend d'un signal qui se perd facilement dans
-  l'espace de noms de processus de Docker et peut rester bloquée
-  indéfiniment sans jamais échouer.
-
-- Le rendu est diffusé au navigateur via WebSocket (`/api/browser/full/ws`)
-  en utilisant le screencast natif du protocole Chrome DevTools
-  (`Page.startScreencast`), pas un `page.screenshot()` sur une minuterie
-  fixe : Chrome ne pousse une frame que quand la page a réellement changé,
-  et attend l'accusé de réception de la précédente avant d'en envoyer une
-  autre - un onglet inactif ne coûte donc quasiment rien, et un client/
-  réseau lent ralentit naturellement l'encodage au lieu d'empiler des
-  captures en retard. La souris/clavier sont renvoyés dans l'autre sens ;
-  le copier-coller (Ctrl+C/V) fait le pont avec le presse-papier local. Le
-  poste client n'exécute jamais le JS du site, seulement des images.
+- Chaque onglet en mode complet obtient son **propre** trio Chromium +
+  écran virtuel (`Xvfb`) + serveur VNC (`x11vnc`), lancés et détruits à la
+  volée par le backend. C'est volontairement plus lourd qu'un seul
+  Chromium partagé entre onglets : un flux VNC montre tout un écran, donc
+  chaque onglet a besoin du sien pour que les fenêtres de différents
+  utilisateurs (ou de différents onglets) ne se retrouvent jamais
+  superposées dans le même flux. `x11vnc` n'écoute que sur `localhost` à
+  l'intérieur du conteneur - rien n'est jamais exposé au-delà du WebSocket
+  authentifié du backend (`/api/browser/full/ws`), qui relaie ses octets
+  RFB tels quels, sans aucun protocole maison au-dessus.
+- Chromium tourne en mode **normal** (pas headless) : plusieurs sites
+  (Google en tête) détectent et bloquent activement Chromium headless
+  ("this browser may not be secure"), et tourner en mode normal referme
+  cet écart en plus des correctifs déjà posés (user-agent standard,
+  `navigator.webdriver` masqué).
+- Le flux vidéo, la souris, le clavier et le copier-coller passent tous par
+  le protocole VNC standard (RFB), via [noVNC](https://novnc.com/) côté
+  client - plus robuste qu'un protocole maison, avec un rafraîchissement
+  qui ne pousse une image que quand l'écran change réellement.
+  L'adresse/retour/suivant/recharger restent des boutons de la barre de
+  l'appli (au-dessus du flux VNC), qui appellent le Chromium distant par
+  une petite API REST dédiée.
 - Chaque requête réseau de la page (documents, XHR, images...) passe par le
   même garde-fou anti-SSRF que le mode texte (`page.route` + `validate_url`).
-- Ressources plafonnées : `FULL_BROWSER_MAX_SESSIONS` sessions simultanées au
-  maximum, fermeture automatique après `FULL_BROWSER_IDLE_TIMEOUT_SECONDS`
-  d'inactivité ou `FULL_BROWSER_MAX_LIFETIME_SECONDS` au total.
-- **Compromis assumé** : plus lourd en bande passante/CPU qu'un chargement
-  HTML classique, et l'audio/vidéo y est forcément moins fluide qu'une
-  vraie balise `<video>` (c'est une image de l'écran, pas un flux vidéo) -
-  pour du contenu vidéo/audio simple, le mode texte (qui, lui, sert le
-  fichier directement au lecteur du navigateur) reste nettement meilleur.
-  Le mode complet est un mode d'appoint pour les sites qui ont vraiment
-  besoin de JavaScript, pas le comportement par défaut.
-  `FULL_BROWSER_ENABLED=false` le désactive entièrement. Chromium ne
-  démarre pas au lancement du backend : il n'est lancé qu'à la toute
-  première utilisation du mode complet, pour ne rien coûter tant que
-  personne n'y touche.
+- Ressources plafonnées : `FULL_BROWSER_MAX_SESSIONS` sessions (donc trios
+  Chromium+Xvfb+x11vnc) simultanées au maximum, fermeture automatique après
+  `FULL_BROWSER_IDLE_TIMEOUT_SECONDS` d'inactivité, `FULL_BROWSER_MAX_LIFETIME_SECONDS`
+  au total, ou dès que l'onglet est fermé/repassé en mode texte côté client.
+- **Compromis assumé** : chaque onglet en mode complet coûte un Chromium
+  entier (~150-300 Mo de RAM), à multiplier par `FULL_BROWSER_MAX_SESSIONS`
+  - surveillez la RAM/CPU du conteneur `backend` si vous l'augmentez sur une
+  petite machine. Le mode complet est un mode d'appoint pour les sites qui
+  ont vraiment besoin de JavaScript, pas le comportement par défaut.
+  `FULL_BROWSER_ENABLED=false` le désactive entièrement, et rien n'est
+  lancé pour un onglet tant qu'il ne passe pas explicitement en mode
+  complet.
 
-## Proxy SOCKS5 (bundled, optionnel) - un vrai navigateur, votre Debian en simple relais
+## Proxy SOCKS5 (bundled, optionnel) - pour un appareil que vous POUVEZ configurer
 
-Le mode texte et le mode complet restent des solutions de rendu côté
-serveur (donc avec des compromis de fluidité/qualité assumés - voir
-ci-dessus). Si ce que vous voulez, c'est utiliser votre propre navigateur
-(Firefox, Chrome...) normalement, avec votre trafic qui sort simplement par
-ce Debian, un vrai proxy SOCKS5 est inclus (`microsocks`), **désactivé par
-défaut** :
+Le mode complet ci-dessus est la solution "zéro trace côté client" : aucun
+réglage réseau à toucher sur l'appareil qui se connecte, juste ouvrir
+l'appli dans un navigateur normal. Le proxy SOCKS5 décrit ici est
+l'inverse : il exige de configurer manuellement le proxy sur l'appareil
+client (voir plus bas), donc **ne convient pas** si vous ne voulez laisser
+aucune trace de réglage sur cette machine - dans ce cas, restez sur le mode
+complet. Il reste utile sur un appareil que vous possédez et pouvez
+configurer librement (votre propre laptop, par exemple), quand vous voulez
+la vitesse et la fidélité natives de votre propre navigateur plutôt qu'un
+flux distant :
 
 ```bash
 # Dans .env :
@@ -379,7 +383,7 @@ côté UNC pour le partage SMB.
 │       ├── mailer.py           # Alertes SMTP
 │       ├── deps.py             # IP réelle, garde LAN, session courante
 │       ├── browser_ssrf.py     # Validation anti-SSRF (+ allowlist interne)
-│       ├── full_browser.py     # Gestionnaire de sessions Playwright
+│       ├── full_browser.py     # Sessions mode complet (Chromium+Xvfb+x11vnc par onglet)
 │       ├── init_db.py          # Bootstrap admin + migrations légères
 │       └── routers/
 │           ├── auth.py, admin.py, admin_users.py
@@ -491,9 +495,10 @@ le rester tant que vous n'avez pas conscience de ce qu'il implique :
   `backend-uploads` (`/app/uploads`), séparé du reste pour survivre aux
   reconstructions d'image. Les fichiers personnels vivent dans
   `backend-userfiles` (`/app/userfiles`), également persistant.
-- Le mode complet ouvre un vrai Chromium : gardez `FULL_BROWSER_MAX_SESSIONS`
-  raisonnable sur une petite machine, et surveillez la RAM/CPU du conteneur
-  `backend` si vous l'activez pour plusieurs comptes en parallèle.
+- Le mode complet ouvre un vrai Chromium (+ son propre Xvfb/x11vnc) par
+  onglet : gardez `FULL_BROWSER_MAX_SESSIONS` raisonnable sur une petite
+  machine, et surveillez la RAM/CPU du conteneur `backend` si vous
+  l'augmentez pour plusieurs comptes en parallèle.
 - `INTERNAL_PROXY_ALLOWLIST` est une liste blanche exacte de hostnames
   (par défaut juste `snappymail`) : n'y ajoutez que des services de
   confiance que vous avez vous-même déployés sur le réseau `internal`,

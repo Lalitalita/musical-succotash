@@ -1,5 +1,6 @@
-import type { KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent } from "react";
+import RFB from "@novnc/novnc";
 import { useEffect, useRef, useState } from "react";
+import { api } from "../../../api/client";
 
 interface Props {
   tabId: string;
@@ -10,70 +11,55 @@ interface Props {
 }
 
 /**
- * Full-browser mode: a real headless Chromium tab running on the backend.
- * This component never runs the target site's JavaScript locally - it only
- * displays JPEG frames streamed over a WebSocket and forwards mouse/
- * keyboard input back. Opt-in per tab, for the rare site the ultra-light
- * text-mode proxy can't render (it needs JS to work at all).
+ * Full-browser mode: a real, private headed Chromium instance running on
+ * the backend, streamed here over VNC (see app/full_browser.py and
+ * routers/full_browser.py) via noVNC. Unlike text mode, the target site's
+ * own JavaScript runs entirely server-side - this component only ever
+ * displays pixels and forwards mouse/keyboard/clipboard input, all handled
+ * by noVNC's RFB client rather than a hand-rolled protocol.
  */
 export function RemoteFrame({ tabId, initialUrl, navSeq }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const wsRef = useRef<WebSocket | null>(null);
-  const frameUrlRef = useRef<string | null>(null);
+  const rfbRef = useRef<RFB | null>(null);
   const mountedNavSeq = useRef<number | null>(null);
-  const [frameSrc, setFrameSrc] = useState<string | null>(null);
-  const [status, setStatus] = useState<"connecting" | "open" | "error" | "closed">("connecting");
+  const [status, setStatus] = useState<"connecting" | "open" | "closed">("connecting");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [remoteTitle, setRemoteTitle] = useState("");
 
   useEffect(() => {
-    const proto = window.location.protocol === "https:" ? "wss" : "ws";
-    const ws = new WebSocket(
-      `${proto}://${window.location.host}/api/browser/full/ws?tab_id=${encodeURIComponent(tabId)}&url=${encodeURIComponent(
-        initialUrl
-      )}`
-    );
-    ws.binaryType = "blob";
-    wsRef.current = ws;
+    const el = containerRef.current;
+    if (!el) return;
+
+    setStatus("connecting");
+    setErrorMessage(null);
     mountedNavSeq.current = navSeq;
 
-    ws.onopen = () => {
-      setStatus("open");
-      const rect = containerRef.current?.getBoundingClientRect();
-      if (rect) {
-        ws.send(JSON.stringify({ type: "resize", width: Math.round(rect.width), height: Math.round(rect.height) }));
-      }
-    };
+    const proto = window.location.protocol === "https:" ? "wss" : "ws";
+    const wsUrl = `${proto}://${window.location.host}/api/browser/full/ws?tab_id=${encodeURIComponent(
+      tabId
+    )}&url=${encodeURIComponent(initialUrl)}`;
 
-    ws.onmessage = (ev) => {
-      if (typeof ev.data === "string") {
-        try {
-          const msg = JSON.parse(ev.data);
-          if (msg.type === "url") setRemoteTitle(msg.title || msg.url || "");
-          if (msg.type === "error") setErrorMessage(msg.message);
-          if (msg.type === "clipboard" && msg.text) {
-            navigator.clipboard.writeText(msg.text).catch(() => {
-              /* clipboard permission denied - nothing we can do without it */
-            });
-          }
-        } catch {
-          /* ignore malformed control message */
-        }
-        return;
-      }
-      const blob = ev.data as Blob;
-      const url = URL.createObjectURL(blob);
-      if (frameUrlRef.current) URL.revokeObjectURL(frameUrlRef.current);
-      frameUrlRef.current = url;
-      setFrameSrc(url);
-    };
+    const rfb = new RFB(el, wsUrl);
+    // Xvfb renders at a fixed 1280x800 - scale that to fit instead of
+    // asking the (xrandr-less) virtual display to actually resize.
+    rfb.scaleViewport = true;
+    rfb.resizeSession = false;
+    rfbRef.current = rfb;
 
-    ws.onerror = () => setStatus("error");
-    ws.onclose = () => setStatus("closed");
+    rfb.addEventListener("connect", () => setStatus("open"));
+    rfb.addEventListener("disconnect", ((e: CustomEvent<{ clean: boolean }>) => {
+      setStatus("closed");
+      if (!e.detail?.clean) setErrorMessage("Connexion perdue.");
+    }) as EventListener);
+    rfb.addEventListener("credentialsrequired", () => setErrorMessage("Authentification refusée."));
+    rfb.addEventListener("securityfailure", () => setErrorMessage("Échec de connexion au flux distant."));
+    rfb.addEventListener("clipboard", ((e: CustomEvent<{ text: string }>) => {
+      if (e.detail?.text) navigator.clipboard.writeText(e.detail.text).catch(() => {});
+    }) as EventListener);
 
     return () => {
-      ws.close();
-      if (frameUrlRef.current) URL.revokeObjectURL(frameUrlRef.current);
+      rfb.disconnect();
+      rfbRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tabId]);
@@ -82,66 +68,38 @@ export function RemoteFrame({ tabId, initialUrl, navSeq }: Props) {
     if (mountedNavSeq.current === null) return;
     if (navSeq <= mountedNavSeq.current) return;
     mountedNavSeq.current = navSeq;
-    wsRef.current?.send(JSON.stringify({ type: "navigate", url: initialUrl }));
+    api.post(`/browser/full/${tabId}/navigate`, { url: initialUrl }).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [navSeq]);
 
   useEffect(() => {
-    const el = containerRef.current;
-    if (!el || typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver((entries) => {
-      const entry = entries[0];
-      if (!entry || wsRef.current?.readyState !== WebSocket.OPEN) return;
-      wsRef.current.send(
-        JSON.stringify({
-          type: "resize",
-          width: Math.round(entry.contentRect.width),
-          height: Math.round(entry.contentRect.height),
+    if (status !== "open") return;
+    let cancelled = false;
+    function poll() {
+      api
+        .get<{ url: string; title: string }>(`/browser/full/${tabId}/meta`)
+        .then((meta) => {
+          if (!cancelled) setRemoteTitle(meta.title || meta.url || "");
         })
-      );
-    });
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, []);
-
-  function send(msg: Record<string, unknown>) {
-    if (wsRef.current?.readyState === WebSocket.OPEN) wsRef.current.send(JSON.stringify(msg));
-  }
-
-  function relativeCoords(e: ReactMouseEvent): { x: number; y: number } {
-    const rect = containerRef.current!.getBoundingClientRect();
-    return { x: Math.round(e.clientX - rect.left), y: Math.round(e.clientY - rect.top) };
-  }
-
-  function onKeyDown(e: ReactKeyboardEvent) {
-    e.preventDefault();
-    const mod = e.ctrlKey || e.metaKey;
-
-    if (mod && e.key.toLowerCase() === "v") {
-      navigator.clipboard
-        .readText()
-        .then((text) => text && send({ type: "paste", text }))
-        .catch(() => {
-          /* clipboard permission denied - nothing we can do without it */
-        });
-      return;
+        .catch(() => {});
     }
+    poll();
+    const t = setInterval(poll, 1500);
+    return () => {
+      cancelled = true;
+      clearInterval(t);
+    };
+  }, [tabId, status]);
 
-    if (mod && e.key.toLowerCase() === "c") {
-      send({ type: "copy" });
-      return;
-    }
-
-    if (e.key.length === 1 && !mod && !e.altKey) {
-      send({ type: "text", text: e.key });
-    } else {
-      send({ type: "keydown", key: e.key });
-    }
-  }
-
-  function onKeyUp(e: ReactKeyboardEvent) {
-    e.preventDefault();
-    if (e.key.length !== 1) send({ type: "keyup", key: e.key });
+  function pasteFromClipboard() {
+    navigator.clipboard
+      .readText()
+      .then((text) => {
+        if (text) rfbRef.current?.clipboardPasteFrom(text);
+      })
+      .catch(() => {
+        /* clipboard permission denied - nothing we can do without it */
+      });
   }
 
   return (
@@ -150,35 +108,24 @@ export function RemoteFrame({ tabId, initialUrl, navSeq }: Props) {
         <span className="remote-frame-badge">Mode complet</span>
         <span className="remote-frame-title">{remoteTitle}</span>
         <div className="remote-frame-controls">
-          <button title="Précédent" onClick={() => send({ type: "back" })}>
+          <button title="Précédent" onClick={() => api.post(`/browser/full/${tabId}/back`).catch(() => {})}>
             ←
           </button>
-          <button title="Suivant" onClick={() => send({ type: "forward" })}>
+          <button title="Suivant" onClick={() => api.post(`/browser/full/${tabId}/forward`).catch(() => {})}>
             →
           </button>
-          <button title="Recharger" onClick={() => send({ type: "reload" })}>
+          <button title="Recharger" onClick={() => api.post(`/browser/full/${tabId}/reload`).catch(() => {})}>
             ⟳
+          </button>
+          <button title="Coller depuis le presse-papiers" onClick={pasteFromClipboard}>
+            📋
           </button>
         </div>
       </div>
 
-      <div
-        ref={containerRef}
-        className="remote-frame-surface"
-        tabIndex={0}
-        onMouseMove={(e) => send({ type: "mousemove", ...relativeCoords(e) })}
-        onMouseDown={(e) => send({ type: "mousedown", ...relativeCoords(e), button: "left" })}
-        onMouseUp={(e) => send({ type: "mouseup", ...relativeCoords(e), button: "left" })}
-        onWheel={(e) => {
-          e.preventDefault();
-          send({ type: "wheel", dx: e.deltaX, dy: e.deltaY });
-        }}
-        onKeyDown={onKeyDown}
-        onKeyUp={onKeyUp}
-      >
-        {frameSrc && <img src={frameSrc} alt="" draggable={false} />}
-        {status === "connecting" && !frameSrc && <div className="remote-frame-status">Connexion au navigateur distant...</div>}
-        {status === "error" && <div className="remote-frame-status">Connexion perdue.</div>}
+      <div ref={containerRef} className="remote-frame-surface">
+        {status === "connecting" && <div className="remote-frame-status">Connexion au navigateur distant...</div>}
+        {status === "closed" && !errorMessage && <div className="remote-frame-status">Connexion fermée.</div>}
         {errorMessage && <div className="remote-frame-status error">{errorMessage}</div>}
       </div>
     </div>

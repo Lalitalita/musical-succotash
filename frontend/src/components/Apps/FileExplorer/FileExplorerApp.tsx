@@ -8,20 +8,13 @@ import {
   type FileExplorerCategory,
   type PinnedFolder,
 } from "../../../state/fileExplorerCategoriesStore";
+import { useFileExplorerStore } from "../../../state/fileExplorerStore";
 import { useFileTypeIcon } from "../../../state/fileTypeIconsStore";
 import { saveDesktopState } from "../../../state/persistence";
 import type { FileEntry, FileSource } from "../../../types";
 
-interface ExplorerTab {
-  id: string;
-  source: FileSource;
-  path: string;
-}
-
-let tabCounter = 0;
-
-function newTab(source: FileSource, path: string): ExplorerTab {
-  return { id: `tab-${Date.now()}-${tabCounter++}`, source, path };
+interface Props {
+  windowId: string;
 }
 
 function joinPath(base: string, name: string): string {
@@ -51,12 +44,6 @@ function FileRowIcon({ entry }: { entry: FileEntry }) {
   const category = getFileCategory(entry.name, entry.is_dir);
   const icon = useFileTypeIcon(category);
   return <AppIconGlyph className="file-icon" icon={icon} />;
-}
-
-function tabLabel(tab: ExplorerTab): string {
-  if (!tab.path) return tab.source === "local" ? "Local" : "Partage SMB";
-  const segments = tab.path.split("/");
-  return segments[segments.length - 1] || (tab.source === "local" ? "Local" : "Partage SMB");
 }
 
 function Sidebar({
@@ -125,9 +112,8 @@ function Sidebar({
   );
 }
 
-export function FileExplorerApp() {
-  const [tabs, setTabs] = useState<ExplorerTab[]>(() => [newTab("local", "")]);
-  const [activeTabId, setActiveTabId] = useState(() => tabs[0].id);
+export function FileExplorerApp({ windowId }: Props) {
+  const { byWindow, ensureWindow, navigate: navigateTab } = useFileExplorerStore();
   const [entries, setEntries] = useState<FileEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -135,18 +121,21 @@ export function FileExplorerApp() {
   const [newFolderName, setNewFolderName] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const activeTab = tabs.find((t) => t.id === activeTabId) || tabs[0];
-  const { source, path } = activeTab;
+  useEffect(() => {
+    ensureWindow(windowId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [windowId]);
+
+  const win = byWindow[windowId];
+  const activeTab = win?.tabs.find((t) => t.id === win.activeTabId);
+  const source = activeTab?.source ?? "local";
+  const path = activeTab?.path ?? "";
   // `api.get/post/del/upload` already prefix calls with "/api" (see
   // src/api/client.ts) - `base` must NOT repeat it, or every request 404s
   // on "/api/api/...". `directBase` is only for window.open(), which needs
   // the real path since it bypasses the api client entirely.
   const base = `/files/${source}`;
   const directBase = `/api/files/${source}`;
-
-  function updateActiveTab(patch: Partial<Pick<ExplorerTab, "source" | "path">>) {
-    setTabs((ts) => ts.map((t) => (t.id === activeTabId ? { ...t, ...patch } : t)));
-  }
 
   const load = useCallback(() => {
     setLoading(true);
@@ -173,27 +162,14 @@ export function FileExplorerApp() {
   }, [load]);
 
   function navigate(nextSource: FileSource, nextPath: string) {
-    updateActiveTab({ source: nextSource, path: nextPath });
+    if (!activeTab) return;
+    navigateTab(windowId, activeTab.id, nextSource, nextPath);
     setNewFolderName(null);
   }
 
   function goTo(next: string) {
-    updateActiveTab({ path: next });
-  }
-
-  function addTab() {
-    const tab = newTab(source, path);
-    setTabs((ts) => [...ts, tab]);
-    setActiveTabId(tab.id);
-  }
-
-  function closeTab(id: string) {
-    setTabs((ts) => {
-      if (ts.length <= 1) return ts;
-      const remaining = ts.filter((t) => t.id !== id);
-      if (id === activeTabId) setActiveTabId(remaining[remaining.length - 1].id);
-      return remaining;
-    });
+    if (!activeTab) return;
+    navigateTab(windowId, activeTab.id, source, next);
   }
 
   function openEntry(entry: FileEntry) {
@@ -294,36 +270,10 @@ export function FileExplorerApp() {
 
   const segments = path ? path.split("/") : [];
 
+  if (!activeTab) return null;
+
   return (
     <div className="file-explorer">
-      <div className="file-explorer-tabs">
-        {tabs.map((t) => (
-          <div
-            key={t.id}
-            className={`file-explorer-tab ${t.id === activeTabId ? "active" : ""}`}
-            onClick={() => setActiveTabId(t.id)}
-          >
-            <span>
-              {t.source === "local" ? "💾" : "🏠"} {tabLabel(t)}
-            </span>
-            {tabs.length > 1 && (
-              <button
-                className="file-explorer-tab-close"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  closeTab(t.id);
-                }}
-              >
-                ✕
-              </button>
-            )}
-          </div>
-        ))}
-        <button className="file-explorer-tab-add" onClick={addTab} title="Nouvel onglet">
-          +
-        </button>
-      </div>
-
       <div className="file-explorer-main">
         <Sidebar activeSource={source} activePath={path} onNavigate={navigate} />
 
