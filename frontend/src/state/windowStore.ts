@@ -3,6 +3,7 @@ import type { AppId, WindowInstance } from "../types";
 
 interface OpenOptions {
   initialUrl?: string;
+  initialTab?: string;
   /** Open a brand-new window even if one for this appId is already open (used for the Navigateur launcher, never for Mail/Calendrier shortcuts). */
   forceNew?: boolean;
 }
@@ -31,7 +32,11 @@ export const useWindowStore = create<WindowState>((set, get) => ({
       if (existing) {
         get().focusWindow(existing.id);
         set((s) => ({
-          windows: s.windows.map((w) => (w.id === existing.id ? { ...w, minimized: false } : w)),
+          windows: s.windows.map((w) =>
+            w.id === existing.id
+              ? { ...w, minimized: false, initialTab: opts?.initialTab ?? w.initialTab }
+              : w
+          ),
         }));
         return existing.id;
       }
@@ -50,6 +55,7 @@ export const useWindowStore = create<WindowState>((set, get) => ({
       maximized: false,
       zIndex: z,
       initialUrl: opts?.initialUrl,
+      initialTab: opts?.initialTab,
     };
     set((s) => ({ windows: [...s.windows, win], topZ: z }));
     return win.id;

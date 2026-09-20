@@ -452,15 +452,17 @@ input {
 
 .browser-toolbar {
   display: flex;
-  gap: 8px;
-  padding: 8px;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 8px;
   background: rgba(255, 255, 255, 0.04);
   flex-shrink: 0;
 }
 
 .browser-toolbar input {
   flex: 1;
-  padding: 6px 10px;
+  padding: 6px 12px;
+  margin: 0 4px;
   border-radius: 16px;
   border: 1px solid var(--border);
   background: rgba(255, 255, 255, 0.08);
@@ -468,14 +470,15 @@ input {
   font-size: 13px;
 }
 
-.browser-toolbar button {
-  padding: 6px 14px;
+.browser-toolbar button[type="submit"] {
+  padding: 6px 16px;
   border-radius: 16px;
   border: none;
   background: var(--accent-strong);
   color: white;
   cursor: pointer;
   font-size: 13px;
+  flex-shrink: 0;
 }
 
 .browser-frame-wrap {
@@ -706,38 +709,38 @@ table.attempts-table td {
   color: var(--text);
 }
 
-.browser-reload {
+.browser-icon-btn {
   background: transparent;
-  border: 1px solid var(--border);
+  border: none;
+  color: var(--text-dim);
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 15px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.browser-icon-btn:hover:not(:disabled) {
+  background: var(--surface-light);
   color: var(--text);
-  border-radius: 16px;
-  width: 32px;
-  cursor: pointer;
-  font-size: 15px;
 }
 
-.browser-reload:disabled {
-  opacity: 0.35;
+.browser-icon-btn:disabled {
+  opacity: 0.3;
   cursor: default;
 }
 
-.browser-star {
-  background: transparent;
-  border: 1px solid var(--border);
+.browser-star.starred {
   color: #ffcf6b;
-  border-radius: 16px;
-  width: 32px;
-  cursor: pointer;
-  font-size: 15px;
-}
-
-.browser-star:disabled {
-  opacity: 0.35;
-  cursor: default;
 }
 
 .browser-mode-toggle {
-  padding: 0 10px;
+  padding: 0 12px;
   height: 32px;
   border-radius: 16px;
   border: 1px solid var(--border);
@@ -745,7 +748,14 @@ table.attempts-table td {
   color: var(--text-dim);
   cursor: pointer;
   font-size: 11px;
+  font-weight: 600;
   white-space: nowrap;
+  flex-shrink: 0;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+
+.browser-mode-toggle:hover {
+  border-color: var(--accent);
 }
 
 .browser-mode-toggle.active {
@@ -959,10 +969,14 @@ table.attempts-table td {
 }
 
 .settings-content h4 {
-  margin: 0 0 14px;
+  margin: 28px 0 14px;
   color: var(--text-dim);
   font-size: 12px;
   text-transform: uppercase;
+}
+
+.settings-content > div > h4:first-child {
+  margin-top: 0;
 }
 
 .settings-avatar-row {

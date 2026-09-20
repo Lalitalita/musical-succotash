@@ -21,6 +21,8 @@ export interface WindowInstance {
   zIndex: number;
   /** Initial navigation target for a freshly opened browser window (Mail/Calendrier shortcuts). */
   initialUrl?: string;
+  /** Initial tab id for a freshly opened Paramètres window (e.g. "bureau" from the desktop context menu). */
+  initialTab?: string;
 }
 
 export interface LoginAttempt {

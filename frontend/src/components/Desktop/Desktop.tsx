@@ -88,7 +88,7 @@ export function Desktop() {
             label: "Personnaliser l'arrière-plan",
             icon: "🎨",
             separatorBefore: true,
-            onSelect: () => openWindow("settings", "Paramètres"),
+            onSelect: () => openWindow("settings", "Paramètres", { initialTab: "bureau" }),
           },
           { label: "Paramètres", icon: "⚙️", onSelect: () => openWindow("settings", "Paramètres") },
         ])

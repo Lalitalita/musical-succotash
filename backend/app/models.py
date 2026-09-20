@@ -23,11 +23,6 @@ class User(Base):
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False)
     display_name: Mapped[str] = mapped_column(String(64), nullable=True)
     avatar_url: Mapped[str] = mapped_column(String(512), nullable=True)
-    # Auto-generated password for this user's own account on the bundled
-    # Dovecot server (unified webmail inbox) - never chosen by the user,
-    # only ever shown back to them decrypted so they can paste it into
-    # Roundcube's login screen once.
-    mail_password_encrypted: Mapped[str] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
@@ -47,24 +42,6 @@ class BrowserCookie(Base):
     secure: Mapped[bool] = mapped_column(Boolean, default=False)
     expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
-
-class MailAccount(Base):
-    """An external IMAP mailbox the user wants pulled into their unified
-    webmail inbox (see app/mail_config.py: fetchmail polls these into the
-    bundled Dovecot server, which the bundled Roundcube reads as one login,
-    each account landing in its own folder)."""
-
-    __tablename__ = "mail_accounts"
-
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
-    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), index=True, nullable=False)
-    label: Mapped[str] = mapped_column(String(64), nullable=False)
-    imap_host: Mapped[str] = mapped_column(String(255), nullable=False)
-    imap_port: Mapped[int] = mapped_column(Integer, default=993)
-    imap_username: Mapped[str] = mapped_column(String(255), nullable=False)
-    imap_password_encrypted: Mapped[str] = mapped_column(Text, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
 class Bookmark(Base):

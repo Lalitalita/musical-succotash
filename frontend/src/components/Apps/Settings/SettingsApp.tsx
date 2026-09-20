@@ -5,7 +5,6 @@ import { useAuthStore } from "../../../state/authStore";
 import { useSettingsStore } from "../../../state/settingsStore";
 import { useWindowStore } from "../../../state/windowStore";
 import { AboutPanel } from "./AboutPanel";
-import { MailAccountsPanel } from "./MailAccountsPanel";
 import { UpdatePanel } from "./UpdatePanel";
 import { UsersPanel } from "./UsersPanel";
 
@@ -21,8 +20,12 @@ const WALLPAPERS = [
 
 const ACCENTS = ["#4cc2ff", "#ff6b9d", "#7bd389", "#ffb454", "#c792ea", "#ff5c5c"];
 
-export function SettingsApp() {
-  const [tab, setTab] = useState<Tab>("compte");
+interface Props {
+  initialTab?: string;
+}
+
+export function SettingsApp({ initialTab }: Props) {
+  const [tab, setTab] = useState<Tab>((initialTab as Tab) || "compte");
   const { me, updateProfile } = useAuthStore();
   const settings = useSettingsStore();
   const [displayName, setDisplayName] = useState(me?.display_name || "");
@@ -32,6 +35,11 @@ export function SettingsApp() {
   const [health, setHealth] = useState<"checking" | "ok" | "down">("checking");
   const fileInput = useRef<HTMLInputElement>(null);
   const wallpaperFileInput = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (initialTab) setTab(initialTab as Tab);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialTab]);
 
   useEffect(() => {
     api
@@ -200,13 +208,16 @@ export function SettingsApp() {
           <div>
             <h4>Applications de messagerie</h4>
             <p className="settings-hint">
-              Renseignez l'adresse de votre webmail et de votre calendrier (ex. une instance Roundcube). Ils
-              s'ouvriront via le navigateur texte sécurisé, accessibles depuis le menu Démarrer et le volet horloge.
+              Renseignez l'adresse de votre webmail et de votre calendrier. Ils s'ouvriront via le navigateur
+              sécurisé, accessibles depuis le menu Démarrer et le volet horloge. Pour le webmail bundled
+              (<code>docker compose --profile webmail up -d --build</code>), utilisez{" "}
+              <code>http://snappymail</code> - une fois connecté avec votre premier compte, ajoutez vos autres
+              adresses mail directement dans Snappymail (Paramètres → Comptes), sans rien reconfigurer ici.
             </p>
             <label className="settings-label">URL du webmail</label>
             <input
               className="settings-input"
-              placeholder="https://webmail.example.com"
+              placeholder="http://snappymail"
               value={settings.mailUrl}
               onChange={(e) => settings.update({ mailUrl: e.target.value })}
             />
@@ -217,8 +228,6 @@ export function SettingsApp() {
               value={settings.calendarUrl}
               onChange={(e) => settings.update({ calendarUrl: e.target.value })}
             />
-
-            <MailAccountsPanel />
           </div>
         )}
 

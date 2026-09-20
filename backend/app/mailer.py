@@ -28,12 +28,23 @@ def send_alert(subject: str, body: str, to: str | None = None) -> bool:
     msg.set_content(body)
 
     try:
-        with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=10) as server:
-            if settings.smtp_use_tls:
-                server.starttls()
-            if settings.smtp_user:
-                server.login(settings.smtp_user, settings.smtp_password)
-            server.send_message(msg)
+        # Port 465 is implicit TLS/SSL from the first byte (SMTPS) - issuing
+        # STARTTLS on a plain smtplib.SMTP connection to it (as opposed to
+        # port 587, which starts plaintext and upgrades) fails or hangs.
+        # OVH's ssl0.ovh.net (a common relay for this project) is exactly
+        # this case.
+        if settings.smtp_port == 465:
+            with smtplib.SMTP_SSL(settings.smtp_host, settings.smtp_port, timeout=10) as server:
+                if settings.smtp_user:
+                    server.login(settings.smtp_user, settings.smtp_password)
+                server.send_message(msg)
+        else:
+            with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=10) as server:
+                if settings.smtp_use_tls:
+                    server.starttls()
+                if settings.smtp_user:
+                    server.login(settings.smtp_user, settings.smtp_password)
+                server.send_message(msg)
         return True
     except Exception:
         logger.exception("Failed to send email: %s", subject)

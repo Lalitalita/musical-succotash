@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { openContextMenu } from "../../../state/contextMenuStore";
 import { useBookmarksStore } from "../../../state/bookmarksStore";
 import { useBrowserStore } from "../../../state/browserStore";
@@ -17,6 +17,7 @@ export function BrowserApp({ windowId, initialUrl }: Props) {
   const [addingBookmark, setAddingBookmark] = useState(false);
   const [newBookmarkTitle, setNewBookmarkTitle] = useState("");
   const [newBookmarkIcon, setNewBookmarkIcon] = useState("");
+  const iframeRefs = useRef<Record<string, HTMLIFrameElement | null>>({});
 
   useEffect(() => {
     ensureWindow(windowId, initialUrl);
@@ -48,6 +49,24 @@ export function BrowserApp({ windowId, initialUrl }: Props) {
     navigate(windowId, activeTab.id, url);
   }
 
+  function goBack() {
+    if (!activeTab) return;
+    try {
+      iframeRefs.current[activeTab.id]?.contentWindow?.history.back();
+    } catch {
+      /* cross-origin edge case: ignore */
+    }
+  }
+
+  function goForward() {
+    if (!activeTab) return;
+    try {
+      iframeRefs.current[activeTab.id]?.contentWindow?.history.forward();
+    } catch {
+      /* cross-origin edge case: ignore */
+    }
+  }
+
   async function confirmAddBookmark() {
     if (!activeTab?.address) return;
     await add(newBookmarkTitle || activeTab.address, activeTab.address, newBookmarkIcon || undefined);
@@ -59,6 +78,33 @@ export function BrowserApp({ windowId, initialUrl }: Props) {
   return (
     <div className="browser-app">
       <form className="browser-toolbar" onSubmit={onNavigate}>
+        <button
+          type="button"
+          className="browser-icon-btn"
+          title="Précédent"
+          onClick={goBack}
+          disabled={activeTab.mode === "full"}
+        >
+          ←
+        </button>
+        <button
+          type="button"
+          className="browser-icon-btn"
+          title="Suivant"
+          onClick={goForward}
+          disabled={activeTab.mode === "full"}
+        >
+          →
+        </button>
+        <button
+          type="button"
+          className="browser-icon-btn"
+          title="Recharger"
+          onClick={() => reload(windowId, activeTab.id)}
+          disabled={!activeTab.address}
+        >
+          ⟳
+        </button>
         <input
           placeholder="Entrer une adresse (ex: exemple.com)"
           value={addressInput}
@@ -67,16 +113,7 @@ export function BrowserApp({ windowId, initialUrl }: Props) {
         <button type="submit">Aller</button>
         <button
           type="button"
-          className="browser-reload"
-          title="Recharger"
-          onClick={() => reload(windowId, activeTab.id)}
-          disabled={!activeTab.address}
-        >
-          ⟳
-        </button>
-        <button
-          type="button"
-          className="browser-star"
+          className={`browser-icon-btn browser-star ${addingBookmark ? "starred" : ""}`}
           title="Ajouter aux favoris"
           onClick={() => setAddingBookmark((v) => !v)}
           disabled={!activeTab.address}
@@ -130,6 +167,9 @@ export function BrowserApp({ windowId, initialUrl }: Props) {
           tab.mode !== "full" && tab.src ? (
             <iframe
               key={tab.id}
+              ref={(el) => {
+                iframeRefs.current[tab.id] = el;
+              }}
               title={tab.title}
               src={tab.src}
               style={{ display: tab.id === win.activeTabId ? "block" : "none" }}

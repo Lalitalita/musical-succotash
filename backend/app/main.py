@@ -18,7 +18,6 @@ from app.routers import (
     events,
     files,
     full_browser,
-    mail_accounts,
     uploads,
 )
 
@@ -66,4 +65,3 @@ app.include_router(full_browser.router)
 app.include_router(files.router)
 app.include_router(diagnostics.router)
 app.include_router(admin_update.router)
-app.include_router(mail_accounts.router)

@@ -103,6 +103,11 @@ class FullBrowserManager:
                 "--disable-backgrounding-occluded-windows",
                 "--disable-renderer-backgrounding",
                 "--mute-audio",
+                # Sites like Google's login flow reject Chromium's default
+                # automation fingerprint ("this browser may not be secure") -
+                # this flag plus the UA override and init script below make
+                # it look like an ordinary desktop Chrome instead.
+                "--disable-blink-features=AutomationControlled",
             ]
         )
         logger.info("Full-browser mode: Chromium launched on first use")
@@ -163,12 +168,25 @@ class FullBrowserManager:
 
         browser = await self._ensure_browser()
         state_path = self._state_path(user_id)
-        context_kwargs = {"viewport": {"width": 1280, "height": 800}}
+        context_kwargs = {
+            "viewport": {"width": 1280, "height": 800},
+            "user_agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                "(KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
+            ),
+            "locale": "fr-FR",
+        }
         if os.path.exists(state_path):
             context_kwargs["storage_state"] = state_path
 
         context = await browser.new_context(**context_kwargs)
         await context.route("**/*", self._route_guard)
+        # Playwright's default Chromium exposes navigator.webdriver = true
+        # and a few other automation tells that Google's login flow in
+        # particular checks for and rejects outright.
+        await context.add_init_script(
+            "Object.defineProperty(navigator, 'webdriver', { get: () => undefined });"
+        )
 
         ucontext = UserBrowserContext(user_id=user_id, context=context)
         self._contexts[user_id] = ucontext

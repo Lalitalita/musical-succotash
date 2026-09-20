@@ -280,8 +280,8 @@ def _wrap_page(title: str, rewritten_body: str) -> str:
         "<!doctype html><html><head><meta charset='utf-8'>"
         f"<title>{title}</title>"
         "<base target='_self'>"
-        "<style>body{font-family:'Segoe UI',sans-serif;color:#1b1b1b;background:#fff;"
-        "max-width:960px;margin:0 auto;padding:16px;} img{max-width:100%;height:auto;}"
+        "<style>html,body{width:100%;} body{font-family:'Segoe UI',sans-serif;color:#1b1b1b;background:#fff;"
+        "box-sizing:border-box;padding:16px;margin:0;} *{box-sizing:inherit;} img{max-width:100%;height:auto;}"
         "video,audio{max-width:100%;} a{color:#0067c0;}</style></head><body>" + rewritten_body + "</body></html>"
     )
 

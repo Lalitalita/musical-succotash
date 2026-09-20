@@ -54,6 +54,8 @@ async def _apply_input(page, msg: dict) -> None:
             await page.keyboard.up(msg["key"])
         elif kind == "text":
             await page.keyboard.insert_text(msg["text"])
+        elif kind == "paste":
+            await page.keyboard.insert_text(msg.get("text", ""))
         elif kind == "resize":
             await page.set_viewport_size({"width": int(msg["width"]), "height": int(msg["height"])})
         elif kind == "back":
@@ -126,6 +128,18 @@ async def full_browser_ws(websocket: WebSocket, tab_id: str, url: str | None = N
             msg = await websocket.receive_json()
             session.touch()
             last_interaction = time.monotonic()
+            if msg.get("type") == "copy":
+                # The remote page's own selected text has to be read back
+                # over the wire and written into the LOCAL clipboard - the
+                # site's JS/DOM selection never reaches this machine
+                # otherwise, only screenshots do.
+                try:
+                    text = await page.evaluate("() => window.getSelection().toString()")
+                except Exception:  # noqa: BLE001
+                    text = ""
+                if text:
+                    await websocket.send_json({"type": "clipboard", "text": text})
+                continue
             await _apply_input(page, msg)
 
     frame_task = asyncio.create_task(frame_loop())

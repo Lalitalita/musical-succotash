@@ -29,7 +29,6 @@ settings = get_settings()
 _USER_TABLE_ADDITIONS = {
     "display_name": "VARCHAR(64)",
     "avatar_url": "VARCHAR(512)",
-    "mail_password_encrypted": "TEXT",
 }
 
 

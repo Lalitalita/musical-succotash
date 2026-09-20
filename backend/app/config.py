@@ -64,8 +64,8 @@ class Settings(BaseSettings):
     browser_proxy_user_agent: str = "Mozilla/5.0 (X11; Linux x86_64) WebDesktopTextProxy/1.0"
     # Hostnames the SSRF guard allows even though they resolve to a private
     # IP - for first-party services we ourselves deployed on the internal
-    # network (e.g. "roundcube"), never for arbitrary user-supplied URLs.
-    internal_proxy_allowlist: str = "roundcube"
+    # network (e.g. "snappymail"), never for arbitrary user-supplied URLs.
+    internal_proxy_allowlist: str = "snappymail"
 
     # --- Full-browser mode (Playwright), opt-in per tab ---
     full_browser_enabled: bool = True
@@ -121,9 +121,6 @@ class Settings(BaseSettings):
     # the socket) resolves it correctly.
     host_project_dir: str = ""
     update_backup_dir: str = "/app/backups"
-
-    # --- Unified webmail (fetchmail + Dovecot + Roundcube) ---
-    mail_config_dir: str = "/app/mailconfig"
 
     @property
     def admin_whitelist_list(self) -> List[str]:

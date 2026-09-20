@@ -124,7 +124,19 @@ export const useBrowserStore = create<BrowserStoreState>((set, get) => ({
     set((s) => {
       const win = s.byWindow[windowId];
       if (!win) return s;
-      const tabs = win.tabs.map((t) => (t.id === tabId ? { ...t, mode } : t));
+      const tabs = win.tabs.map((t) => {
+        if (t.id !== tabId) return t;
+        if (mode === "text") {
+          // The tab's `src` is only ever recomputed by navigate()/reload()
+          // while already in text mode, so after browsing around in full
+          // mode (which only updates `address`) it would otherwise still
+          // point at whatever page was last loaded in text mode - looking
+          // like switching modes "jumps back" to an old URL.
+          const url = t.address ? normalizeUrl(t.address) : null;
+          return { ...t, mode, src: url ? viewSrc(url, Date.now()) : t.src };
+        }
+        return { ...t, mode };
+      });
       return { byWindow: { ...s.byWindow, [windowId]: { ...win, tabs } } };
     });
   },

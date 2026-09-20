@@ -51,6 +51,11 @@ export function RemoteFrame({ tabId, initialUrl, navSeq }: Props) {
           const msg = JSON.parse(ev.data);
           if (msg.type === "url") setRemoteTitle(msg.title || msg.url || "");
           if (msg.type === "error") setErrorMessage(msg.message);
+          if (msg.type === "clipboard" && msg.text) {
+            navigator.clipboard.writeText(msg.text).catch(() => {
+              /* clipboard permission denied - nothing we can do without it */
+            });
+          }
         } catch {
           /* ignore malformed control message */
         }
@@ -110,7 +115,24 @@ export function RemoteFrame({ tabId, initialUrl, navSeq }: Props) {
 
   function onKeyDown(e: ReactKeyboardEvent) {
     e.preventDefault();
-    if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    const mod = e.ctrlKey || e.metaKey;
+
+    if (mod && e.key.toLowerCase() === "v") {
+      navigator.clipboard
+        .readText()
+        .then((text) => text && send({ type: "paste", text }))
+        .catch(() => {
+          /* clipboard permission denied - nothing we can do without it */
+        });
+      return;
+    }
+
+    if (mod && e.key.toLowerCase() === "c") {
+      send({ type: "copy" });
+      return;
+    }
+
+    if (e.key.length === 1 && !mod && !e.altKey) {
       send({ type: "text", text: e.key });
     } else {
       send({ type: "keydown", key: e.key });

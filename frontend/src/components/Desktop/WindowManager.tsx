@@ -19,7 +19,7 @@ export function WindowManager() {
         >
           {win.appId === "browser" && <BrowserApp windowId={win.id} initialUrl={win.initialUrl} />}
           {win.appId === "security-dashboard" && <SecurityDashboard />}
-          {win.appId === "settings" && <SettingsApp />}
+          {win.appId === "settings" && <SettingsApp initialTab={win.initialTab} />}
           {win.appId === "files" && <FileExplorerApp />}
         </Window>
       ))}

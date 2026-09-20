@@ -239,45 +239,34 @@ réinitialiser un TOTP ou supprimer un compte (le dernier compte admin ne
 peut ni être rétrogradé ni supprimé, pour ne jamais se retrouver sans accès
 admin).
 
-## Webmail unifié : Roundcube + Dovecot + fetchmail (bundled, optionnel)
+## Webmail SnappyMail (bundled, optionnel)
 
-Trois conteneurs (`roundcube`, `dovecot`, `fetchmail`), **désactivés par
-défaut** (profil Docker Compose `roundcube`) - un simple
-`docker compose up -d --build` ne les démarre jamais :
+Un conteneur SnappyMail (successeur maintenu de Roundcube/Rainloop) est
+inclus, **désactivé par défaut** (profil Docker Compose `webmail`) :
 
 ```bash
-docker compose --profile roundcube up -d --build
+docker compose --profile webmail up -d --build
 ```
 
-Contrairement à la version précédente (un seul compte IMAP externe câblé
-dans `.env`), Roundcube se connecte maintenant à un serveur **Dovecot**
-embarqué qui sert de boîte unifiée : chaque utilisateur ajoute autant de
-comptes IMAP externes qu'il veut depuis Paramètres → Applications
-(`/api/mail/accounts`), et un conteneur **fetchmail** les relève en tâche de
-fond (toutes les 5 minutes) pour les déposer chacun dans son propre dossier
-de cette boîte unique - une seule connexion Roundcube pour tout voir.
+Contrairement à Roundcube, SnappyMail sait nativement gérer **plusieurs
+vrais comptes IMAP sous un seul login**, sans infra d'agrégation
+supplémentaire côté serveur : on se connecte une première fois avec un
+compte mail réel, puis on ajoute les autres directement dans l'appli
+(Paramètres → Comptes une fois connecté) - rien à configurer côté
+webdesktop au-delà de l'URL.
 
-- Identifiants de connexion à Dovecot = nom d'utilisateur webdesktop +
-  mot de passe auto-généré, affichable une fois depuis Paramètres →
-  Applications ("Afficher le mot de passe de messagerie") pour le saisir
-  dans l'écran de connexion Roundcube.
-- Les mots de passe IMAP externes sont chiffrés en base (`app/crypto.py`,
-  dérivé de `SECRET_KEY`), jamais renvoyés en clair après l'ajout.
-- Dovecot n'a pas de serveur SMTP : pour **envoyer** depuis Roundcube,
-  renseignez `ROUNDCUBE_SMTP_HOST`/`ROUNDCUBE_SMTP_PORT` (un relais que vous
-  avez le droit d'utiliser), ou configurez un SMTP par identité directement
-  dans les paramètres d'identité de Roundcube.
-- Tout ce petit monde tourne sur le réseau `internal` uniquement - jamais
-  exposé publiquement ni même sur l'hôte. Le proxy navigateur a une
-  exception ciblée à son garde-fou anti-SSRF pour le seul hostname
-  `roundcube` (`INTERNAL_PROXY_ALLOWLIST`). Configurez l'URL du webmail sur
-  `http://roundcube` dans Paramètres → Applications (assez JS-dépendant, le
-  mode complet donne un meilleur résultat que le mode texte - et grâce à la
-  mémorisation des cookies/session, vous n'aurez plus à vous reconnecter à
-  chaque fois).
-- C'est une pièce d'infra plus avancée que le reste de l'appli (Dovecot +
-  Sieve pour le tri par dossier via une convention d'adressage `+dossier`) -
-  testez avec un compte non critique d'abord.
+- Première mise en route : ouvrez `http://<hôte>/?admin` (via le navigateur
+  du bureau, proxifié comme n'importe quelle adresse) - identifiants par
+  défaut `admin`/`admin`, **à changer immédiatement**. C'est là qu'on
+  autorise les domaines IMAP/SMTP voulus (ou "n'importe quel domaine").
+- Tourne sur le réseau `internal` uniquement - jamais exposé publiquement
+  ni même sur l'hôte. Le proxy navigateur a une exception ciblée à son
+  garde-fou anti-SSRF pour le seul hostname `snappymail`
+  (`INTERNAL_PROXY_ALLOWLIST`).
+- Configurez l'URL du webmail sur `http://snappymail` dans Paramètres →
+  Applications (assez JS-dépendant, le mode complet donne un meilleur
+  résultat que le mode texte - et grâce à la mémorisation des
+  cookies/session, vous n'aurez plus à vous reconnecter à chaque fois).
 
 ## Explorateur de fichiers (local + SMB)
 
