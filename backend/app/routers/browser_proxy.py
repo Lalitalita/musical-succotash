@@ -10,9 +10,17 @@ because only the text/markup and small static assets ever cross the wire.
 Images, fonts, CSS, video and audio are streamed through /asset with Range
 support so `<video>`/`<audio>` playback and seeking work - the bytes still
 only ever transit through this backend, never fetched directly by the
-client, but nothing here executes upstream JavaScript.
+client, but nothing here executes upstream JavaScript. Since there's no JS
+at all, every place a site might otherwise rely on script to reveal an
+image gets a server-side equivalent instead: `srcset`, CSS `url()`
+references (rewritten in inline `style=`, embedded `<style>` blocks and
+external stylesheets alike, not just `<img src>`), the common
+`data-src`-style lazy-load attributes, and `<noscript>` fallback markup
+(unwrapped rather than stripped, since it's precisely the no-JS content a
+site itself designated).
 """
 import logging
+import re
 from urllib.parse import parse_qsl, quote, urlencode, urljoin, urlparse, urlunparse
 
 import httpx
@@ -54,6 +62,12 @@ _MAX_REDIRECTS = 5
 _URL_PARAM = "url"
 _FORM_BASE_PARAM = "__wd_url"
 
+# Stylesheets have to be fully buffered to rewrite their url()/@import
+# references (see the /asset "text/css" branch below) - real-world CSS
+# files are a few hundred KB at most, so this is generous headroom without
+# risking memory pressure from a pathological response.
+_CSS_REWRITE_MAX_BYTES = 5 * 1024 * 1024
+
 _ASSET_CONTENT_TYPES = (
     "text/css",
     "image/",
@@ -64,7 +78,7 @@ _ASSET_CONTENT_TYPES = (
     "application/vnd.ms-fontobject",
 )
 
-_STRIP_TAGS = ["script", "iframe", "object", "embed", "noscript", "applet"]
+_STRIP_TAGS = ["script", "iframe", "object", "embed", "applet"]
 _ASSET_TAG_ATTRS = [
     ("img", "src"),
     ("source", "src"),
@@ -73,6 +87,26 @@ _ASSET_TAG_ATTRS = [
     ("video", "poster"),
     ("audio", "src"),
 ]
+_SRCSET_TAGS = ["img", "source"]
+
+# Common JS lazy-load conventions: the real URL sits in one of these
+# data-* attributes and is only ever copied into `src`/`srcset` by
+# JavaScript the browser would run on scroll - since nothing here executes
+# JS, do that swap ourselves before the normal asset-rewriting pass below.
+_LAZY_SRC_ATTRS = ("data-src", "data-lazy-src", "data-original", "data-lazy")
+_LAZY_SRCSET_ATTRS = ("data-srcset", "data-lazy-srcset")
+
+# Deliberately not a full CSS parser: a couple of regexes covering url(...)
+# (background-image, @font-face src, image-set(), ...) and the bare-string
+# form of @import is enough for the real-world stylesheets this proxy sees,
+# without the maintenance cost of a real CSS AST.
+_CSS_URL_RE = re.compile(r"url\(\s*(['\"]?)([^'\")]+)\1\s*\)", re.IGNORECASE)
+_CSS_BARE_IMPORT_RE = re.compile(r"@import\s+(['\"])([^'\"]+)\1", re.IGNORECASE)
+# Legacy IE-only CSS-as-script vectors (expression(), behavior:,
+# -moz-binding:) - meaningless to any modern engine, stripped as a cheap
+# extra precaution now that style attributes/blocks are kept instead of
+# deleted outright.
+_CSS_DANGEROUS_RE = re.compile(r"expression\s*\(|-moz-binding\s*:|behavior\s*:", re.IGNORECASE)
 
 
 class BrowserFetchError(Exception):
@@ -216,11 +250,78 @@ def _resolve_redirect_chain(url: str, cookies: httpx.Cookies | None = None) -> s
     raise BrowserFetchError(status.HTTP_502_BAD_GATEWAY, "Trop de redirections.")
 
 
+def _proxy_if_external(absolute: str) -> str | None:
+    return _proxy_asset_url(absolute) if urlparse(absolute).scheme in ("http", "https") else None
+
+
+def _rewrite_css_urls(css: str, base_url: str) -> str:
+    css = _CSS_DANGEROUS_RE.sub("", css)
+
+    def resolve(raw: str) -> str | None:
+        raw = raw.strip()
+        if not raw or raw.startswith("data:") or raw.startswith("#"):
+            return None
+        return _proxy_if_external(urljoin(base_url, raw))
+
+    def replace_url(m: re.Match) -> str:
+        quote_char, raw = m.group(1) or '"', m.group(2)
+        proxied = resolve(raw)
+        return m.group(0) if not proxied else f"url({quote_char}{proxied}{quote_char})"
+
+    def replace_import(m: re.Match) -> str:
+        quote_char, raw = m.group(1), m.group(2)
+        proxied = resolve(raw)
+        return m.group(0) if not proxied else f"@import {quote_char}{proxied}{quote_char}"
+
+    css = _CSS_URL_RE.sub(replace_url, css)
+    css = _CSS_BARE_IMPORT_RE.sub(replace_import, css)
+    return css
+
+
+def _rewrite_srcset(value: str, base_url: str) -> str:
+    candidates = []
+    for candidate in value.split(","):
+        candidate = candidate.strip()
+        if not candidate:
+            continue
+        bits = candidate.split()
+        url_part, descriptor = bits[0], " ".join(bits[1:])
+        proxied = _proxy_if_external(urljoin(base_url, url_part))
+        candidates.append(f"{proxied or url_part} {descriptor}".strip())
+    return ", ".join(candidates)
+
+
 def _rewrite_html(html: str, base_url: str) -> tuple[str, str]:
     soup = BeautifulSoup(html, "lxml")
 
+    # <noscript> is precisely the no-JS fallback content a site itself
+    # designated (often a plain <img src=...> behind a lazy-load library) -
+    # since nothing here ever runs JS, that's exactly the right content to
+    # show, so unwrap it instead of treating it like the other stripped
+    # tags below.
+    for tag in soup.find_all("noscript"):
+        tag.unwrap()
+
     for tag in soup.find_all(_STRIP_TAGS):
         tag.decompose()
+
+    # Lazy-loaded images: the real URL only ever reaches `src`/`srcset` via
+    # JS, so pull it out of whichever data-* attribute the page's
+    # lazy-load library used before the normal asset rewriting below.
+    for tag in soup.find_all(_SRCSET_TAGS):
+        current_src = (tag.get("src") or "").strip()
+        if not current_src or current_src.startswith("data:"):
+            for attr in _LAZY_SRC_ATTRS:
+                val = (tag.get(attr) or "").strip()
+                if val:
+                    tag["src"] = val
+                    break
+        if not (tag.get("srcset") or "").strip():
+            for attr in _LAZY_SRCSET_ATTRS:
+                val = (tag.get(attr) or "").strip()
+                if val:
+                    tag["srcset"] = val
+                    break
 
     # Strip inline event handlers and javascript: URIs everywhere.
     for tag in soup.find_all(True):
@@ -231,7 +332,16 @@ def _rewrite_html(html: str, base_url: str) -> tuple[str, str]:
             if tag.get(url_attr, "").strip().lower().startswith("javascript:"):
                 del tag.attrs[url_attr]
         if "style" in tag.attrs:
-            del tag.attrs["style"]  # drop inline style: can smuggle url()/expression() abuse
+            # Rewritten (not dropped) so CSS background-image/etc. still
+            # render - _rewrite_css_urls routes every url() through the
+            # same SSRF-guarded /asset endpoint as any other resource, and
+            # strips the handful of legacy CSS-as-script vectors first.
+            tag["style"] = _rewrite_css_urls(tag["style"], base_url)
+
+    for style_tag in soup.find_all("style"):
+        css_text = style_tag.string if style_tag.string is not None else style_tag.get_text()
+        if css_text:
+            style_tag.string = _rewrite_css_urls(css_text, base_url)
 
     for meta in soup.find_all("meta", attrs={"http-equiv": True}):
         if meta.get("http-equiv", "").lower() == "refresh":
@@ -266,9 +376,12 @@ def _rewrite_html(html: str, base_url: str) -> tuple[str, str]:
         for tag in soup.find_all(tag_name, **{attr: True}):
             if tag_name == "link" and tag.get("rel") and "stylesheet" not in tag.get("rel"):
                 continue
-            absolute = urljoin(base_url, tag[attr])
-            if urlparse(absolute).scheme in ("http", "https"):
-                tag[attr] = _proxy_asset_url(absolute)
+            proxied = _proxy_if_external(urljoin(base_url, tag[attr]))
+            if proxied:
+                tag[attr] = proxied
+
+    for tag in soup.find_all(_SRCSET_TAGS, srcset=True):
+        tag["srcset"] = _rewrite_srcset(tag["srcset"], base_url)
 
     title = soup.title.string.strip() if soup.title and soup.title.string else base_url
     body = str(soup)
@@ -365,6 +478,29 @@ def asset(request: Request, url: str = Query(...), user: User = Depends(get_curr
     if not any(content_type.startswith(p) for p in _ASSET_CONTENT_TYPES):
         upstream.close()
         raise HTTPException(status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, "Asset type not allowed through the proxy.")
+
+    if content_type.startswith("text/css"):
+        # Unlike every other asset type, a stylesheet's own bytes can carry
+        # further references (background-image, @font-face, @import) that
+        # need the same rewrite _rewrite_html gives the page itself - has
+        # to be buffered (can't rewrite a stream chunk-by-chunk) but
+        # stylesheets are small enough that this is a non-issue.
+        chunks = []
+        total = 0
+        try:
+            for chunk in upstream.iter_bytes():
+                total += len(chunk)
+                if total > _CSS_REWRITE_MAX_BYTES:
+                    break
+                chunks.append(chunk)
+        finally:
+            upstream.close()
+        content = b"".join(chunks)
+        try:
+            css_text = content.decode(upstream.encoding or "utf-8", errors="replace")
+        except (LookupError, TypeError):
+            css_text = content.decode("utf-8", errors="replace")
+        return Response(content=_rewrite_css_urls(css_text, final_url), media_type="text/css")
 
     max_bytes = settings.browser_proxy_max_stream_bytes
 

@@ -124,9 +124,17 @@ URL au backend (`GET /api/browser/view?url=...`), qui :
 1. Valide l'URL et résout le DNS pour bloquer tout accès SSRF (IP privées,
    loopback, link-local, métadonnées cloud) — y compris à chaque redirection.
 2. Récupère la page avec sa propre IP sortante (celle de l'hôte Debian).
-3. Supprime scripts, gestionnaires d'événements, `javascript:`, iframes/objets
-   et styles inline, puis réécrit tous les liens/formulaires/ressources
-   statiques (`img`, `link[rel=stylesheet]`) pour repasser par le proxy.
+3. Supprime scripts, gestionnaires d'événements, `javascript:` et
+   iframes/objets, puis réécrit **toutes** les références vers des
+   ressources statiques pour qu'elles repassent par le proxy - pas
+   seulement `img[src]`/`link[rel=stylesheet]`, mais aussi `srcset`, les
+   `url()` CSS (aussi bien dans un `style=` inline ou un `<style>` que dans
+   une feuille externe, réécrite à son tour quand elle transite par
+   `/api/browser/asset`), les attributs `data-src`/`data-srcset` des
+   bibliothèques de lazy-loading JS les plus courantes (puisqu'aucun JS ne
+   s'exécute pour faire ce remplacement lui-même), et le contenu des
+   `<noscript>` (dépaquetés plutôt que supprimés : c'est justement le
+   contenu de secours sans JS que le site a lui-même prévu).
 4. Renvoie du HTML texte pur, affiché dans une `<iframe sandbox>` sans
    exécution de script côté client.
 
