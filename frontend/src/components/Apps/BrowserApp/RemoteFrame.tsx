@@ -27,6 +27,13 @@ export interface RemoteFrameHandle {
  * navigate/back/forward/reload goes straight from there to the
  * /browser/full/:tab REST endpoints rather than through this component.
  */
+// noVNC has no connection timeout of its own - a WebSocket/RFB handshake
+// that never resolves (a backend hiccup, a dropped packet mid-negotiation)
+// otherwise leaves "Connexion..." spinning forever with no way out short of
+// reloading the whole app. This caps how long that's tolerated before
+// treating it as failed and offering a retry.
+const CONNECT_TIMEOUT_MS = 20000;
+
 export const RemoteFrame = forwardRef<RemoteFrameHandle, Props>(function RemoteFrame(
   { tabId, initialUrl },
   ref
@@ -35,6 +42,7 @@ export const RemoteFrame = forwardRef<RemoteFrameHandle, Props>(function RemoteF
   const rfbRef = useRef<RFB | null>(null);
   const [status, setStatus] = useState<"connecting" | "open" | "closed">("connecting");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [retryToken, setRetryToken] = useState(0);
 
   useImperativeHandle(ref, () => ({
     paste() {
@@ -85,8 +93,18 @@ export const RemoteFrame = forwardRef<RemoteFrameHandle, Props>(function RemoteF
     rfb.compressionLevel = 1;
     rfbRef.current = rfb;
 
-    rfb.addEventListener("connect", () => setStatus("open"));
+    const connectTimeout = window.setTimeout(() => {
+      setErrorMessage("La connexion prend trop de temps.");
+      setStatus("closed");
+      rfb.disconnect();
+    }, CONNECT_TIMEOUT_MS);
+
+    rfb.addEventListener("connect", () => {
+      window.clearTimeout(connectTimeout);
+      setStatus("open");
+    });
     rfb.addEventListener("disconnect", ((e: CustomEvent<{ clean: boolean }>) => {
+      window.clearTimeout(connectTimeout);
       setStatus("closed");
       if (!e.detail?.clean) setErrorMessage("Connexion perdue.");
     }) as EventListener);
@@ -97,17 +115,26 @@ export const RemoteFrame = forwardRef<RemoteFrameHandle, Props>(function RemoteF
     }) as EventListener);
 
     return () => {
+      window.clearTimeout(connectTimeout);
       rfb.disconnect();
       rfbRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tabId]);
+  }, [tabId, retryToken]);
 
   return (
     <div ref={containerRef} className="remote-frame-surface">
-      {status === "connecting" && <div className="remote-frame-status">Connexion au navigateur distant...</div>}
-      {status === "closed" && !errorMessage && <div className="remote-frame-status">Connexion fermée.</div>}
-      {errorMessage && <div className="remote-frame-status error">{errorMessage}</div>}
+      {status === "connecting" && !errorMessage && (
+        <div className="remote-frame-status">Connexion au navigateur distant...</div>
+      )}
+      {(status === "closed" || errorMessage) && (
+        <div className="remote-frame-status error">
+          <p>{errorMessage || "Connexion fermée."}</p>
+          <button type="button" className="remote-frame-retry" onClick={() => setRetryToken((n) => n + 1)}>
+            Réessayer
+          </button>
+        </div>
+      )}
     </div>
   );
 });

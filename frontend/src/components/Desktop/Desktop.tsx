@@ -59,7 +59,17 @@ export function Desktop() {
 
   function openItem(item: (typeof items)[number]) {
     if (item.kind === "app" && item.appId) {
-      openWindow(item.appId, APP_LABELS[item.appId] || item.label);
+      const browserFullMode = item.appId === "browser" && item.fullMode;
+      openWindow(item.appId, APP_LABELS[item.appId] || item.label, {
+        // A plain app shortcut reuses an already-open window of the same
+        // app, same as double-clicking its taskbar icon - but that would
+        // silently ignore "mode complet" if a text-mode Navigateur window
+        // already happened to be open, so force a fresh one in that case
+        // (same as a full-mode "Site web" shortcut does).
+        forceNew: browserFullMode,
+        initialMode: browserFullMode ? "full" : undefined,
+        maximized: browserFullMode,
+      });
     } else if (item.kind === "url" && item.url) {
       const url = normalizeUrl(item.url);
       openWindow("browser", item.label, {

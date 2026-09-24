@@ -199,12 +199,23 @@ autre page.
   `color_scheme: "dark"` (Playwright) - les sites qui gèrent
   `prefers-color-scheme` s'affichent directement en sombre, les autres
   reçoivent l'inversion heuristique de Chrome.
-- La taille de l'écran virtuel (Xvfb) et de la fenêtre Chromium est choisie
-  au moment de la connexion pour correspondre à la taille réelle de la
-  fenêtre de l'appli à cet instant (au lieu d'une résolution fixe qui
-  laissait des bandes vides sur les côtés) - `rfb.scaleViewport` reste un
-  filet de sécurité si la fenêtre est redimensionnée ensuite en cours de
-  session, plutôt qu'un vrai redimensionnement live du bureau distant.
+- La taille de l'écran virtuel (Xvfb) est choisie au moment de la connexion
+  pour correspondre exactement à la taille réelle de la fenêtre de l'appli
+  à cet instant - le client noVNC n'a donc jamais besoin de mettre à
+  l'échelle le flux (ce qui, en préservant le ratio d'aspect, laissait des
+  bandes vides sur les côtés). La fenêtre Chromium elle-même vise un
+  contenu légèrement plus petit que cet écran (marge pour ses propres
+  onglets/barre d'adresse), pas la taille de l'écran elle-même - sinon
+  cette même marge repousse le bas de la page hors du flux visible.
+  `rfb.scaleViewport` reste un filet de sécurité si la fenêtre est
+  redimensionnée ensuite en cours de session, plutôt qu'un vrai
+  redimensionnement live du bureau distant.
+- Plusieurs onglets en mode complet démarrent réellement en parallèle :
+  seule la petite comptabilité interne (allocation d'écran virtuel,
+  enregistrement de la session) est brièvement synchronisée, pas le
+  démarrage complet de Xvfb+x11vnc+Chromium (plusieurs secondes) - sinon
+  un deuxième onglet ouvert pendant que le premier démarre encore
+  attendait derrière lui pour rien.
 - Téléchargements : interceptés côté serveur (`page.on("download")`) et
   enregistrés directement dans `Local > Downloads` de l'Explorateur de
   fichiers de l'utilisateur (voir plus bas) - rien n'est jamais écrit sur
@@ -356,6 +367,12 @@ bloqué dans un état bizarre.
   Chromium du mode complet garde ses propres onglets/barre d'adresse, qu'il
   n'est pas possible de masquer pendant qu'il est piloté par Playwright
   (voir la limite connue du mode complet plus haut).
+- Un raccourci "Application" pointant vers le Navigateur a lui aussi une
+  case "Ouvrir en mode complet" (grisée avec une explication pour les
+  trois autres apps - Fichiers/Sécurité/Paramètres - où le mode complet
+  n'a pas de sens). Coché, il force une nouvelle fenêtre déjà en mode
+  complet et maximisée, plutôt que de basculer une fenêtre Navigateur déjà
+  ouverte (qui ignorerait sinon silencieusement la demande).
 - **Personnalisation du fond d'écran** : en plus des dégradés prédéfinis,
   Paramètres → Bureau propose une couleur unie (sélecteur natif) ou une
   image personnelle uploadée.

@@ -820,6 +820,28 @@ table.attempts-table td {
 
 .remote-frame-status.error {
   color: #ff8a8a;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.remote-frame-status.error p {
+  margin: 0;
+}
+
+.remote-frame-retry {
+  padding: 6px 16px;
+  border-radius: 6px;
+  border: 1px solid var(--accent);
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.remote-frame-retry:hover {
+  background: var(--accent-strong);
+  border-color: transparent;
+  color: white;
 }
 
 .bookmark-form {

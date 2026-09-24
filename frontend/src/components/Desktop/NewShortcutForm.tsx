@@ -20,6 +20,7 @@ export function NewShortcutForm({ onClose }: Props) {
   const [fullMode, setFullMode] = useState(false);
   const [chromeless, setChromeless] = useState(false);
   const [appId, setAppId] = useState<AppId>("browser");
+  const [appFullMode, setAppFullMode] = useState(false);
   const [icon, setIcon] = useState<IconOverride>({ icon: "🔗" });
   const [picking, setPicking] = useState(false);
 
@@ -39,7 +40,15 @@ export function NewShortcutForm({ onClose }: Props) {
         chromeless: chromeless && !fullMode,
       });
     } else {
-      add({ kind: "app", label: label.trim() || APP_LABELS[appId], appId, icon: DEFAULT_APP_ICONS[appId] });
+      add({
+        kind: "app",
+        label: label.trim() || APP_LABELS[appId],
+        appId,
+        icon: DEFAULT_APP_ICONS[appId],
+        // Only "Navigateur" is a real browser page - mode complet is a
+        // browsing concept, meaningless for Fichiers/Sécurité/Paramètres.
+        fullMode: appId === "browser" && appFullMode,
+      });
     }
     onClose();
   }
@@ -109,6 +118,21 @@ export function NewShortcutForm({ onClose }: Props) {
                   </option>
                 ))}
               </select>
+
+              <label className="settings-checkbox-row">
+                <input
+                  type="checkbox"
+                  checked={appId === "browser" && appFullMode}
+                  disabled={appId !== "browser"}
+                  onChange={(e) => setAppFullMode(e.target.checked)}
+                />
+                Ouvrir en mode complet (JavaScript activé)
+              </label>
+              {appId !== "browser" && (
+                <p className="settings-hint">
+                  Le mode complet est propre au Navigateur - sans objet pour {APP_LABELS[appId]}.
+                </p>
+              )}
             </>
           )}
 

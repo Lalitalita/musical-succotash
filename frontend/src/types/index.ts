@@ -122,9 +122,11 @@ export interface DesktopItem {
   kind: "app" | "url";
   appId?: AppId;
   url?: string;
-  /** "Site web" shortcuts only: open straight into full mode (a real,
-   * JS-capable browser) instead of the default lightweight text mode -
-   * for single-site "app" shortcuts (e.g. Instagram) that need JS. */
+  /** Open straight into full mode (a real, JS-capable browser) instead of
+   * the default lightweight text mode: for "Site web" shortcuts, for a
+   * single site that needs JS (e.g. Instagram); for "Application"
+   * shortcuts, only meaningful when appId is "browser" (mode complet is a
+   * browsing concept, not applicable to Fichiers/Sécurité/Paramètres). */
   fullMode?: boolean;
   /** "Site web" shortcuts only: WebToApp style - opens with no browser
    * toolbar/bookmarks bar/tab strip, just the site filling the window

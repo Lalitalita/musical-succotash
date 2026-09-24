@@ -46,19 +46,32 @@ _DEFAULT_WIDTH, _DEFAULT_HEIGHT = 1280, 800
 _MIN_SIZE, _MAX_SIZE = 320, 2560
 # Chromium's own chrome (tab strip + address bar, plus headroom for an
 # infobar like "unsupported command-line flag") sits INSIDE the window
-# Playwright sizes to fit the requested viewport - so the Xvfb screen has
-# to be taller than the viewport by this much, or that chrome pushes the
-# bottom of the actual page content past the screen's edge and off the
-# visible VNC feed entirely. Verified empirically (Xvfb+Chromium+a page
-# with a marker at the exact bottom of the requested viewport): without
-# this margin the marker is completely clipped; with it, fully visible.
+# Playwright sizes to fit the requested viewport - the content viewport
+# has to be shorter than the client's actual screen/container by this much,
+# or that chrome pushes the bottom of the actual page content past the
+# Xvfb screen's edge and off the visible VNC feed entirely. Verified
+# empirically (Xvfb+Chromium+a page with a marker at the exact bottom of
+# the requested viewport): without this margin the marker is completely
+# clipped; with it, fully visible.
 _CHROME_CHROME_HEIGHT = 130
 
 
 def _clamp_size(width: Optional[int], height: Optional[int]) -> tuple[int, int]:
+    """Clamps the client's reported container size - this becomes the Xvfb
+    screen size 1:1, so the VNC client never has to scale the framebuffer to
+    fit its container (which would either crop it or, if it preserves
+    aspect ratio, leave unused space on the sides - both were tried and
+    both looked wrong). The content viewport inside that screen is smaller,
+    see _content_viewport_size below."""
     w = width if width and _MIN_SIZE <= width <= _MAX_SIZE else _DEFAULT_WIDTH
     h = height if height and _MIN_SIZE <= height <= _MAX_SIZE else _DEFAULT_HEIGHT
     return w, h
+
+
+def _content_viewport_size(screen_w: int, screen_h: int) -> tuple[int, int]:
+    """The Playwright viewport Chromium's content actually fills, inside a
+    screen/window that also has to fit Chromium's own chrome on top of it."""
+    return screen_w, max(_MIN_SIZE, screen_h - _CHROME_CHROME_HEIGHT)
 
 # Internal-only Xvfb display numbers / VNC ports for full-browser sessions.
 # Neither is ever exposed outside the container: x11vnc binds "-localhost"
@@ -103,6 +116,24 @@ class FullBrowserManager:
         self._tab_owner: dict[str, str] = {}
         self._used_displays: set[int] = set()
         self._lock = asyncio.Lock()
+        # A tab_id currently having its Xvfb+x11vnc+Chromium trio launched -
+        # get_or_create() used to hold self._lock for that entire multi-second
+        # boot, so opening a SECOND full-mode tab while the first was still
+        # starting up serialized behind it, waiting on the lock for as long
+        # as the first tab's whole boot took (which is what made a second
+        # tab's "Connexion au serveur distant..." take a very long time to
+        # ever resolve). Now only the quick bookkeeping around provisioning
+        # holds the lock; a tab_id's entry here just lets a second
+        # get_or_create() call for that SAME tab_id (e.g. a fast
+        # re-render) wait for the one already in progress instead of
+        # launching a duplicate trio, without blocking any OTHER tab_id.
+        self._creating: dict[str, asyncio.Event] = {}
+        # close_tab() called for a tab_id that's still in self._creating
+        # (session not registered yet, so there's nothing to close) is
+        # recorded here and honored the instant that provisioning finishes -
+        # otherwise it would silently no-op and leak the Chromium+Xvfb+
+        # x11vnc trio it was busy starting.
+        self._close_on_create: set[str] = set()
         self._cleanup_task: Optional[asyncio.Task] = None
 
     def _state_path(self, user_id: str) -> str:
@@ -139,6 +170,7 @@ class FullBrowserManager:
                 elapsed_since_save = 0
 
             now = time.monotonic()
+            to_save: list[FullBrowserSession] = []
             async with self._lock:
                 for tab_id, session in list(self._sessions.items()):
                     idle = now - session.last_active
@@ -155,8 +187,14 @@ class FullBrowserManager:
                         # of only on close is what lets a *newly opened*
                         # tab pick up a login that happened in an
                         # already-open one.
-                        with contextlib.suppress(Exception):
-                            await session.context.storage_state(path=self._state_path(session.user_id))
+                        to_save.append(session)
+
+            # Saving is Playwright I/O, not bookkeeping - done outside the
+            # lock so it can't hold up a tab that's mid-creation or another
+            # request briefly needing the manager lock.
+            for session in to_save:
+                with contextlib.suppress(Exception):
+                    await session.context.storage_state(path=self._state_path(session.user_id))
 
     async def _route_guard(self, route, request) -> None:
         try:
@@ -211,14 +249,22 @@ class FullBrowserManager:
         self, tab_id: str, user_id: str, width: Optional[int] = None, height: Optional[int] = None
     ) -> FullBrowserSession:
         w, h = _clamp_size(width, height)
-        display_num = self._alloc_display()
+        content_w, content_h = _content_viewport_size(w, h)
+        async with self._lock:
+            display_num = self._alloc_display()
         vnc_port = _VNC_PORT_BASE + (display_num - _DISPLAY_BASE)
         xvfb_proc: Optional[asyncio.subprocess.Process] = None
         x11vnc_proc: Optional[asyncio.subprocess.Process] = None
         browser: Optional[Browser] = None
         try:
+            # The Xvfb screen matches the client's own container size (w, h)
+            # exactly - not the content viewport - so the VNC framebuffer the
+            # client receives is already the right size and noVNC never has
+            # to scale it, which previously left unused space on the sides
+            # (scaling down to fit a taller-than-container framebuffer while
+            # preserving aspect ratio shrank the width too).
             xvfb_proc = await asyncio.create_subprocess_exec(
-                "Xvfb", f":{display_num}", "-screen", "0", f"{w}x{h + _CHROME_CHROME_HEIGHT}x24",
+                "Xvfb", f":{display_num}", "-screen", "0", f"{w}x{h}x24",
                 "-ac", "-nolisten", "tcp",
                 stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL,
             )
@@ -291,7 +337,7 @@ class FullBrowserManager:
 
             state_path = self._state_path(user_id)
             context_kwargs = {
-                "viewport": {"width": w, "height": h},
+                "viewport": {"width": content_w, "height": content_h},
                 "user_agent": (
                     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
                     "(KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
@@ -311,7 +357,8 @@ class FullBrowserManager:
             page = await context.new_page()
             page.on("download", lambda d: asyncio.create_task(self._save_download(user_id, d)))
         except Exception:
-            self._used_displays.discard(display_num)
+            async with self._lock:
+                self._used_displays.discard(display_num)
             if browser:
                 with contextlib.suppress(Exception):
                     await browser.close()
@@ -330,8 +377,9 @@ class FullBrowserManager:
             context=context,
             page=page,
         )
-        self._sessions[tab_id] = session
-        self._tab_owner[tab_id] = user_id
+        async with self._lock:
+            self._sessions[tab_id] = session
+            self._tab_owner[tab_id] = user_id
         return session
 
     async def get_or_create(
@@ -340,18 +388,59 @@ class FullBrowserManager:
         if not settings.full_browser_enabled:
             raise RuntimeError("Full-browser mode is not enabled on this server.")
 
-        async with self._lock:
-            existing = self._sessions.get(tab_id)
-            if existing:
-                if self._tab_owner.get(tab_id) != user_id:
-                    raise NotOwnerError()
-                existing.touch()
-                return existing
+        while True:
+            async with self._lock:
+                existing = self._sessions.get(tab_id)
+                if existing:
+                    if self._tab_owner.get(tab_id) != user_id:
+                        raise NotOwnerError()
+                    existing.touch()
+                    return existing
 
-            if len(self._sessions) >= settings.full_browser_max_sessions:
-                raise SessionLimitError()
+                event = self._creating.get(tab_id)
+                own_creation = event is None
+                if own_creation:
+                    # Count both live sessions and ones currently being
+                    # provisioned (not yet in self._sessions) against the
+                    # cap, so several tabs opened at once can't all slip
+                    # past the check before any of them finishes.
+                    if len(self._sessions) + len(self._creating) >= settings.full_browser_max_sessions:
+                        raise SessionLimitError()
+                    event = asyncio.Event()
+                    self._creating[tab_id] = event
 
-            return await self._create_session(tab_id, user_id, width, height)
+            if not own_creation:
+                # Someone else is already provisioning this exact tab_id
+                # (e.g. a fast double-call) - wait for them instead of
+                # launching a duplicate Xvfb/Chromium trio, then loop back
+                # to pick up the session they created.
+                await event.wait()
+                continue
+
+            try:
+                session = await self._create_session(tab_id, user_id, width, height)
+            except Exception:
+                async with self._lock:
+                    self._creating.pop(tab_id, None)
+                    self._close_on_create.discard(tab_id)
+                event.set()
+                raise
+
+            async with self._lock:
+                self._creating.pop(tab_id, None)
+                close_requested = tab_id in self._close_on_create
+                self._close_on_create.discard(tab_id)
+            event.set()
+
+            if close_requested:
+                # close_tab() was called while this session was still
+                # booting - honor it now instead of leaving a live
+                # Chromium+Xvfb+x11vnc trio nobody asked for anymore.
+                async with self._lock:
+                    await self._close_session_unlocked(tab_id)
+                raise RuntimeError("Tab closed while its full-browser session was starting.")
+
+            return session
 
     async def _save_download(self, user_id: str, download: Download) -> None:
         try:
@@ -382,6 +471,12 @@ class FullBrowserManager:
 
     async def close_tab(self, tab_id: str) -> None:
         async with self._lock:
+            if tab_id in self._creating:
+                # Still provisioning (no session registered yet, nothing to
+                # close here) - flag it to be torn down the instant it
+                # finishes booting instead, see get_or_create().
+                self._close_on_create.add(tab_id)
+                return
             await self._close_session_unlocked(tab_id)
 
     def session_count(self) -> int:
