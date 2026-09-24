@@ -338,12 +338,24 @@ bloqué dans un état bizarre.
   vers un site web ou une application, en plus de l'icône Navigateur fixe.
   Persistés avec le reste de l'état du bureau. Les icônes se déplacent à la
   souris (glisser-déposer, position mémorisée) et leur icône peut être
-  remplacée par une image (clic droit → "Changer l'icône...", upload via
-  `POST /api/uploads`). Un raccourci "Site web" a une case "Ouvrir en mode
-  complet" - coché, il ouvre directement le site dans un onglet Navigateur
-  déjà en mode complet (JS activé), pratique pour épingler un site
-  particulier (Instagram, etc.) comme une app dédiée sans repasser par le
-  bouton mode texte/complet à chaque fois.
+  remplacée par une image, à la création du raccourci ou ensuite (clic
+  droit → "Changer l'icône...") - les deux passent par la même banque
+  d'icônes (emoji prédéfinis ou image uploadée). Un raccourci "Site web" a
+  une case "Ouvrir en mode complet" - coché, il ouvre directement le site
+  dans un onglet Navigateur déjà en mode complet (JS activé) **et déjà
+  maximisé** (la capture d'écran distante est faite à la taille réelle de
+  l'écran dès la connexion, plutôt que démarrer petit et être agrandi/flou
+  ensuite), pratique pour épingler un site particulier (Instagram, etc.)
+  comme une app dédiée sans repasser par le bouton mode texte/complet à
+  chaque fois.
+- **Raccourcis "style application" (WebToApp)** : une seconde case,
+  "Style application", masque la barre d'adresse et les favoris du
+  Navigateur - la fenêtre ne montre plus que le site, comme une vraie app
+  dédiée plutôt qu'un onglet de navigateur. Uniquement disponible en mode
+  texte (case désactivée si "Ouvrir en mode complet" est cochée) : le vrai
+  Chromium du mode complet garde ses propres onglets/barre d'adresse, qu'il
+  n'est pas possible de masquer pendant qu'il est piloté par Playwright
+  (voir la limite connue du mode complet plus haut).
 - **Personnalisation du fond d'écran** : en plus des dégradés prédéfinis,
   Paramètres → Bureau propose une couleur unie (sélecteur natif) ou une
   image personnelle uploadée.

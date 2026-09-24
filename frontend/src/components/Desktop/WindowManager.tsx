@@ -7,8 +7,11 @@ import { SecurityDashboard } from "../Apps/SecurityDashboard/SecurityDashboard";
 import { SettingsApp } from "../Apps/Settings/SettingsApp";
 import { Window } from "./Window";
 
-function titlebarContentFor(appId: string, windowId: string) {
-  if (appId === "browser") return <BrowserTabBar windowId={windowId} />;
+function titlebarContentFor(appId: string, windowId: string, chromeless?: boolean) {
+  // A chromeless (WebToApp) window shows its plain title instead of the
+  // tab strip - it's locked to a single tab, so there's nothing to switch
+  // between and the tab chrome would just be another thing to hide.
+  if (appId === "browser" && !chromeless) return <BrowserTabBar windowId={windowId} />;
   if (appId === "files") return <FileExplorerTabBar windowId={windowId} />;
   return undefined;
 }
@@ -19,9 +22,14 @@ export function WindowManager() {
   return (
     <>
       {windows.map((win) => (
-        <Window key={win.id} win={win} titlebarContent={titlebarContentFor(win.appId, win.id)}>
+        <Window key={win.id} win={win} titlebarContent={titlebarContentFor(win.appId, win.id, win.chromeless)}>
           {win.appId === "browser" && (
-            <BrowserApp windowId={win.id} initialUrl={win.initialUrl} initialMode={win.initialMode} />
+            <BrowserApp
+              windowId={win.id}
+              initialUrl={win.initialUrl}
+              initialMode={win.initialMode}
+              chromeless={win.chromeless}
+            />
           )}
           {win.appId === "security-dashboard" && <SecurityDashboard />}
           {win.appId === "settings" && <SettingsApp initialTab={win.initialTab} />}

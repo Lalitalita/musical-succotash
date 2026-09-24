@@ -25,6 +25,10 @@ export interface WindowInstance {
   initialTab?: string;
   /** Opens straight into full mode - used by desktop "app" shortcuts pinned to a site. */
   initialMode?: BrowserTabMode;
+  /** WebToApp-style shortcut: hides the browser's own toolbar/bookmarks
+   * bar/tab strip so the window shows just the site, like a real app -
+   * only meaningful in text mode (see DesktopItem.chromeless). */
+  chromeless?: boolean;
 }
 
 export interface LoginAttempt {
@@ -122,6 +126,11 @@ export interface DesktopItem {
    * JS-capable browser) instead of the default lightweight text mode -
    * for single-site "app" shortcuts (e.g. Instagram) that need JS. */
   fullMode?: boolean;
+  /** "Site web" shortcuts only: WebToApp style - opens with no browser
+   * toolbar/bookmarks bar/tab strip, just the site filling the window
+   * like a standalone app. Only works in text mode: full mode's real
+   * Chromium window can't have its own chrome hidden (see README). */
+  chromeless?: boolean;
   /** Free-form position on the desktop grid, in pixels from the top-left -
    * absent until the user drags the icon at least once (falls back to the
    * normal grid flow). */

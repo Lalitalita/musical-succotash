@@ -11,9 +11,12 @@ interface Props {
   windowId: string;
   initialUrl?: string;
   initialMode?: BrowserTabMode;
+  /** WebToApp style: hides the toolbar/bookmarks bar so only the site
+   * itself is visible, like a standalone app - see WindowInstance.chromeless. */
+  chromeless?: boolean;
 }
 
-export function BrowserApp({ windowId, initialUrl, initialMode }: Props) {
+export function BrowserApp({ windowId, initialUrl, initialMode, chromeless }: Props) {
   const { byWindow, ensureWindow, navigate, reload, setMode, updateTabMeta } = useBrowserStore();
   const { bookmarks, loaded, load, add, remove } = useBookmarksStore();
   const [addressInput, setAddressInput] = useState("");
@@ -134,6 +137,8 @@ export function BrowserApp({ windowId, initialUrl, initialMode }: Props) {
 
   return (
     <div className="browser-app">
+      {!chromeless && (
+      <>
       <form className="browser-toolbar" onSubmit={onNavigate}>
         <button type="button" className="browser-icon-btn" title="Précédent" onClick={goBack}>
           ←
@@ -217,6 +222,8 @@ export function BrowserApp({ windowId, initialUrl, initialMode }: Props) {
         ))}
         {bookmarks.length === 0 && <span className="browser-status">Aucun favori - cliquez sur ☆ pour en ajouter.</span>}
       </div>
+      </>
+      )}
 
       <div className="browser-frame-wrap">
         {win.tabs.map((tab) =>

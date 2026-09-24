@@ -71,6 +71,10 @@ export function Desktop() {
         // from the first connection instead of starting small and later
         // being scaled up (blurry, doesn't fill the screen properly).
         maximized: item.fullMode,
+        // Chromeless only actually hides anything in text mode - full
+        // mode's real Chromium chrome can't be hidden (see README), so
+        // NewShortcutForm never lets both be set together.
+        chromeless: item.chromeless,
       });
     }
   }

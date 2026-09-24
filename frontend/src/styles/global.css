@@ -964,6 +964,43 @@ table.attempts-table td {
   font-size: 13px;
 }
 
+/* Windows-style scrollbar: thin, transparent track, a rounded translucent
+ * thumb that only darkens on hover - the browser-default scrollbar looked
+ * out of place next to the rest of the Windows-11-styled Settings chrome. */
+.settings-tabs,
+.settings-content,
+.icon-picker-grid {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.22) transparent;
+}
+
+.settings-tabs::-webkit-scrollbar,
+.settings-content::-webkit-scrollbar,
+.icon-picker-grid::-webkit-scrollbar {
+  width: 10px;
+}
+
+.settings-tabs::-webkit-scrollbar-track,
+.settings-content::-webkit-scrollbar-track,
+.icon-picker-grid::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.settings-tabs::-webkit-scrollbar-thumb,
+.settings-content::-webkit-scrollbar-thumb,
+.icon-picker-grid::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
+  border: 3px solid transparent;
+  background-clip: padding-box;
+}
+
+.settings-tabs::-webkit-scrollbar-thumb:hover,
+.settings-content::-webkit-scrollbar-thumb:hover,
+.icon-picker-grid::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(255, 255, 255, 0.38);
+}
+
 .settings-content h4 {
   margin: 28px 0 14px;
   color: var(--text-dim);
@@ -1289,6 +1326,19 @@ table.attempts-table td {
   background: var(--accent-strong);
   color: white;
   border-color: transparent;
+}
+
+.shortcut-icon-pick {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  margin-bottom: 10px;
+}
+
+.shortcut-icon-pick .icon-glyph {
+  font-size: 20px;
+  line-height: 1;
 }
 
 .modal-actions {

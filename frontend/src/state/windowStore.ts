@@ -12,6 +12,8 @@ interface OpenOptions {
    * first connection instead of a small default window that then looks
    * blurry/zoomed once scaled up to fill the screen later. */
   maximized?: boolean;
+  /** WebToApp-style shortcut - see WindowInstance.chromeless. */
+  chromeless?: boolean;
 }
 
 interface WindowState {
@@ -63,6 +65,7 @@ export const useWindowStore = create<WindowState>((set, get) => ({
       initialUrl: opts?.initialUrl,
       initialTab: opts?.initialTab,
       initialMode: opts?.initialMode,
+      chromeless: opts?.chromeless,
     };
     set((s) => ({ windows: [...s.windows, win], topZ: z }));
     return win.id;
