@@ -87,10 +87,6 @@ export interface BrowserTab {
   address: string;
   src: string | null;
   mode: BrowserTabMode;
-  /** Bumped on every explicit navigate()/reload() while in full mode, so the
-   * remote-control view knows to send a fresh navigation - as opposed to
-   * merely being remounted when the user switches tabs. */
-  navSeq: number;
 }
 
 export interface DesktopSettings {

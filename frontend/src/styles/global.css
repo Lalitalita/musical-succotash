@@ -792,67 +792,14 @@ table.attempts-table td {
 }
 
 /* ---------------- Full-browser mode (remote-controlled tab) ---------------- */
-
-.remote-frame {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  background: #111;
-}
-
-.remote-frame-bar {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 6px 10px;
-  background: rgba(255, 255, 255, 0.06);
-  flex-shrink: 0;
-}
-
-.remote-frame-badge {
-  font-size: 10px;
-  text-transform: uppercase;
-  padding: 2px 8px;
-  border-radius: 10px;
-  background: var(--accent-strong);
-  color: white;
-  flex-shrink: 0;
-}
-
-.remote-frame-title {
-  font-size: 12px;
-  color: var(--text-dim);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  flex: 1;
-}
-
-.remote-frame-controls {
-  display: flex;
-  gap: 4px;
-  flex-shrink: 0;
-}
-
-.remote-frame-controls button {
-  width: 26px;
-  height: 26px;
-  border: none;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--text);
-  cursor: pointer;
-}
-
-.remote-frame-controls button:hover {
-  background: rgba(255, 255, 255, 0.12);
-}
+/* Navigation lives in the shared .browser-toolbar now (see BrowserApp.tsx) -
+ * this is just the VNC video surface, absolutely filling its parent
+ * .browser-frame-wrap (position: relative). */
 
 .remote-frame-surface {
-  position: relative;
-  flex: 1;
-  min-height: 0;
+  position: absolute;
+  inset: 0;
+  background: #111;
   overflow: hidden;
   outline: none;
   cursor: default;

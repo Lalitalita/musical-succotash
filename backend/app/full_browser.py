@@ -44,6 +44,15 @@ settings = get_settings()
 
 _DEFAULT_WIDTH, _DEFAULT_HEIGHT = 1280, 800
 _MIN_SIZE, _MAX_SIZE = 320, 2560
+# Chromium's own chrome (tab strip + address bar, plus headroom for an
+# infobar like "unsupported command-line flag") sits INSIDE the window
+# Playwright sizes to fit the requested viewport - so the Xvfb screen has
+# to be taller than the viewport by this much, or that chrome pushes the
+# bottom of the actual page content past the screen's edge and off the
+# visible VNC feed entirely. Verified empirically (Xvfb+Chromium+a page
+# with a marker at the exact bottom of the requested viewport): without
+# this margin the marker is completely clipped; with it, fully visible.
+_CHROME_CHROME_HEIGHT = 130
 
 
 def _clamp_size(width: Optional[int], height: Optional[int]) -> tuple[int, int]:
@@ -121,8 +130,14 @@ class FullBrowserManager:
 
     async def _cleanup_loop(self) -> None:
         interval = 10
+        elapsed_since_save = 0
         while True:
             await asyncio.sleep(interval)
+            elapsed_since_save += interval
+            save_due = elapsed_since_save >= settings.full_browser_state_save_interval_seconds
+            if save_due:
+                elapsed_since_save = 0
+
             now = time.monotonic()
             async with self._lock:
                 for tab_id, session in list(self._sessions.items()):
@@ -131,6 +146,17 @@ class FullBrowserManager:
                     if idle > settings.full_browser_idle_timeout_seconds or age > settings.full_browser_max_lifetime_seconds:
                         logger.info("Closing idle/expired full-browser session %s", tab_id)
                         await self._close_session_unlocked(tab_id)
+                    elif save_due:
+                        # Each full-mode tab is its own isolated Chromium
+                        # process (see module docstring), so logging into a
+                        # site in one tab is otherwise invisible to a
+                        # sibling tab until this session closes and writes
+                        # its storage_state - saving periodically instead
+                        # of only on close is what lets a *newly opened*
+                        # tab pick up a login that happened in an
+                        # already-open one.
+                        with contextlib.suppress(Exception):
+                            await session.context.storage_state(path=self._state_path(session.user_id))
 
     async def _route_guard(self, route, request) -> None:
         try:
@@ -192,7 +218,8 @@ class FullBrowserManager:
         browser: Optional[Browser] = None
         try:
             xvfb_proc = await asyncio.create_subprocess_exec(
-                "Xvfb", f":{display_num}", "-screen", "0", f"{w}x{h}x24", "-ac", "-nolisten", "tcp",
+                "Xvfb", f":{display_num}", "-screen", "0", f"{w}x{h + _CHROME_CHROME_HEIGHT}x24",
+                "-ac", "-nolisten", "tcp",
                 stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL,
             )
             await self._wait_for_socket(f"/tmp/.X11-unix/X{display_num}")
@@ -237,7 +264,13 @@ class FullBrowserManager:
                     "--disable-backgrounding-occluded-windows",
                     "--disable-renderer-backgrounding",
                     "--mute-audio",
-                    f"--window-size={w},{h}",
+                    # Deliberately no --window-size: passing one forces the
+                    # OS window to exactly that size regardless of the
+                    # requested viewport, which is what caused the clipping
+                    # bug above. Leaving it unset lets Chromium size its own
+                    # window to fit the viewport option below plus its own
+                    # chrome, within the taller Xvfb screen that leaves room
+                    # for it.
                     "--window-position=0,0",
                     # Sites like Google's login flow reject Chromium's default
                     # automation fingerprint ("this browser may not be

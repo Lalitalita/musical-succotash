@@ -26,6 +26,10 @@ interface BrowserStoreState {
   setActiveTab: (windowId: string, tabId: string) => void;
   navigate: (windowId: string, tabId: string, addressInput: string) => void;
   reload: (windowId: string, tabId: string) => void;
+  /** Reflects what the remote page itself reports (polled from
+   * /browser/full/:tab/meta) back into the tab - e.g. the user followed a
+   * link inside the VNC view rather than typing into our address bar. */
+  updateTabMeta: (windowId: string, tabId: string, meta: Partial<Pick<BrowserTab, "address" | "title">>) => void;
   setMode: (windowId: string, tabId: string, mode: BrowserTabMode) => void;
   removeWindow: (windowId: string) => void;
   hydrate: (byWindow: Record<string, BrowserWindowState>) => void;
@@ -44,7 +48,6 @@ function makeTab(address = "", mode: BrowserTabMode = "text"): BrowserTab {
     address,
     src: mode === "text" && url ? viewSrc(url) : null,
     mode,
-    navSeq: 0,
   };
 }
 
@@ -104,9 +107,7 @@ export const useBrowserStore = create<BrowserStoreState>((set, get) => ({
       const tabs = win.tabs.map((t) => {
         if (t.id !== tabId) return t;
         if (t.mode === "full") {
-          // The remote-control view is watching navSeq to know when to send
-          // a fresh navigation over its already-open WebSocket.
-          return { ...t, address: addressInput, title: addressInput, navSeq: t.navSeq + 1 };
+          return { ...t, address: addressInput, title: addressInput };
         }
         // Cache-bust so clicking the same bookmark/link twice (or re-typing
         // the same address) always reloads the iframe: an identical `src`
@@ -123,11 +124,19 @@ export const useBrowserStore = create<BrowserStoreState>((set, get) => ({
       const win = s.byWindow[windowId];
       if (!win) return s;
       const tabs = win.tabs.map((t) => {
-        if (t.id !== tabId || !t.address) return t;
-        if (t.mode === "full") return { ...t, navSeq: t.navSeq + 1 };
+        if (t.id !== tabId || !t.address || t.mode === "full") return t;
         const url = normalizeUrl(t.address);
         return url ? { ...t, src: viewSrc(url, Date.now()) } : t;
       });
+      return { byWindow: { ...s.byWindow, [windowId]: { ...win, tabs } } };
+    });
+  },
+
+  updateTabMeta: (windowId, tabId, meta) => {
+    set((s) => {
+      const win = s.byWindow[windowId];
+      if (!win) return s;
+      const tabs = win.tabs.map((t) => (t.id === tabId ? { ...t, ...meta } : t));
       return { byWindow: { ...s.byWindow, [windowId]: { ...win, tabs } } };
     });
   },

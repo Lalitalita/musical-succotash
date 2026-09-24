@@ -1,13 +1,18 @@
 import RFB from "@novnc/novnc";
-import { useEffect, useRef, useState } from "react";
-import { api } from "../../../api/client";
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 
 interface Props {
   tabId: string;
   initialUrl: string;
-  /** Bumped by the parent every time the user explicitly navigates (address
-   * bar submit, bookmark click, reload) while this tab is in full mode. */
-  navSeq: number;
+}
+
+export interface RemoteFrameHandle {
+  /** Sends the local clipboard's text into the remote session, matching a
+   * Ctrl+V a real client-side browser would do transparently - here it
+   * needs an explicit trigger since reading the clipboard requires a user
+   * gesture. Exposed so the shared browser toolbar's paste button can
+   * reach into whichever RemoteFrame is currently mounted. */
+  paste: () => void;
 }
 
 /**
@@ -16,15 +21,33 @@ interface Props {
  * routers/full_browser.py) via noVNC. Unlike text mode, the target site's
  * own JavaScript runs entirely server-side - this component only ever
  * displays pixels and forwards mouse/keyboard/clipboard input, all handled
- * by noVNC's RFB client rather than a hand-rolled protocol.
+ * by noVNC's RFB client rather than a hand-rolled protocol. Navigation
+ * controls and the address bar live in the shared BrowserApp toolbar, not
+ * here - this is just the video surface, and every explicit
+ * navigate/back/forward/reload goes straight from there to the
+ * /browser/full/:tab REST endpoints rather than through this component.
  */
-export function RemoteFrame({ tabId, initialUrl, navSeq }: Props) {
+export const RemoteFrame = forwardRef<RemoteFrameHandle, Props>(function RemoteFrame(
+  { tabId, initialUrl },
+  ref
+) {
   const containerRef = useRef<HTMLDivElement>(null);
   const rfbRef = useRef<RFB | null>(null);
-  const mountedNavSeq = useRef<number | null>(null);
   const [status, setStatus] = useState<"connecting" | "open" | "closed">("connecting");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [remoteTitle, setRemoteTitle] = useState("");
+
+  useImperativeHandle(ref, () => ({
+    paste() {
+      navigator.clipboard
+        .readText()
+        .then((text) => {
+          if (text) rfbRef.current?.clipboardPasteFrom(text);
+        })
+        .catch(() => {
+          /* clipboard permission denied - nothing we can do without it */
+        });
+    },
+  }));
 
   useEffect(() => {
     const el = containerRef.current;
@@ -32,7 +55,6 @@ export function RemoteFrame({ tabId, initialUrl, navSeq }: Props) {
 
     setStatus("connecting");
     setErrorMessage(null);
-    mountedNavSeq.current = navSeq;
 
     // Xvfb/Chromium are sized once, at connect time, to match the window as
     // it is right now - avoids the box being launched at a fixed 1280x800
@@ -81,70 +103,11 @@ export function RemoteFrame({ tabId, initialUrl, navSeq }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tabId]);
 
-  useEffect(() => {
-    if (mountedNavSeq.current === null) return;
-    if (navSeq <= mountedNavSeq.current) return;
-    mountedNavSeq.current = navSeq;
-    api.post(`/browser/full/${tabId}/navigate`, { url: initialUrl }).catch(() => {});
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [navSeq]);
-
-  useEffect(() => {
-    if (status !== "open") return;
-    let cancelled = false;
-    function poll() {
-      api
-        .get<{ url: string; title: string }>(`/browser/full/${tabId}/meta`)
-        .then((meta) => {
-          if (!cancelled) setRemoteTitle(meta.title || meta.url || "");
-        })
-        .catch(() => {});
-    }
-    poll();
-    const t = setInterval(poll, 1500);
-    return () => {
-      cancelled = true;
-      clearInterval(t);
-    };
-  }, [tabId, status]);
-
-  function pasteFromClipboard() {
-    navigator.clipboard
-      .readText()
-      .then((text) => {
-        if (text) rfbRef.current?.clipboardPasteFrom(text);
-      })
-      .catch(() => {
-        /* clipboard permission denied - nothing we can do without it */
-      });
-  }
-
   return (
-    <div className="remote-frame">
-      <div className="remote-frame-bar">
-        <span className="remote-frame-badge">Mode complet</span>
-        <span className="remote-frame-title">{remoteTitle}</span>
-        <div className="remote-frame-controls">
-          <button title="Précédent" onClick={() => api.post(`/browser/full/${tabId}/back`).catch(() => {})}>
-            ←
-          </button>
-          <button title="Suivant" onClick={() => api.post(`/browser/full/${tabId}/forward`).catch(() => {})}>
-            →
-          </button>
-          <button title="Recharger" onClick={() => api.post(`/browser/full/${tabId}/reload`).catch(() => {})}>
-            ⟳
-          </button>
-          <button title="Coller depuis le presse-papiers" onClick={pasteFromClipboard}>
-            📋
-          </button>
-        </div>
-      </div>
-
-      <div ref={containerRef} className="remote-frame-surface">
-        {status === "connecting" && <div className="remote-frame-status">Connexion au navigateur distant...</div>}
-        {status === "closed" && !errorMessage && <div className="remote-frame-status">Connexion fermée.</div>}
-        {errorMessage && <div className="remote-frame-status error">{errorMessage}</div>}
-      </div>
+    <div ref={containerRef} className="remote-frame-surface">
+      {status === "connecting" && <div className="remote-frame-status">Connexion au navigateur distant...</div>}
+      {status === "closed" && !errorMessage && <div className="remote-frame-status">Connexion fermée.</div>}
+      {errorMessage && <div className="remote-frame-status error">{errorMessage}</div>}
     </div>
   );
-}
+});

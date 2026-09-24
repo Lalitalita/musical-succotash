@@ -1,10 +1,11 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
+import { api } from "../../../api/client";
 import { openContextMenu } from "../../../state/contextMenuStore";
 import { useBookmarksStore } from "../../../state/bookmarksStore";
 import { useBrowserStore } from "../../../state/browserStore";
 import type { BrowserTabMode } from "../../../types";
 import { normalizeUrl } from "../../../utils/url";
-import { RemoteFrame } from "./RemoteFrame";
+import { RemoteFrame, type RemoteFrameHandle } from "./RemoteFrame";
 
 interface Props {
   windowId: string;
@@ -13,13 +14,15 @@ interface Props {
 }
 
 export function BrowserApp({ windowId, initialUrl, initialMode }: Props) {
-  const { byWindow, ensureWindow, navigate, reload, setMode } = useBrowserStore();
+  const { byWindow, ensureWindow, navigate, reload, setMode, updateTabMeta } = useBrowserStore();
   const { bookmarks, loaded, load, add, remove } = useBookmarksStore();
   const [addressInput, setAddressInput] = useState("");
   const [addingBookmark, setAddingBookmark] = useState(false);
   const [newBookmarkTitle, setNewBookmarkTitle] = useState("");
   const [newBookmarkIcon, setNewBookmarkIcon] = useState("");
   const iframeRefs = useRef<Record<string, HTMLIFrameElement | null>>({});
+  const remoteFrameRef = useRef<RemoteFrameHandle>(null);
+  const addressInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     ensureWindow(windowId, initialUrl, initialMode);
@@ -37,22 +40,61 @@ export function BrowserApp({ windowId, initialUrl, initialMode }: Props) {
     setAddressInput(activeTab?.address || "");
   }, [activeTab?.id, activeTab?.address]);
 
+  // Full mode has no address bar of its own (see RemoteFrame) - poll the
+  // remote page's real URL/title and reflect it here, both in the address
+  // bar (unless the user is actively typing a new one) and in the tab's
+  // own title (so the merged tab strip shows the real page, not just
+  // whatever address was last typed).
+  useEffect(() => {
+    if (!activeTab || activeTab.mode !== "full") return;
+    const tabId = activeTab.id;
+    let cancelled = false;
+    function poll() {
+      api
+        .get<{ url: string; title: string }>(`/browser/full/${tabId}/meta`)
+        .then((meta) => {
+          if (cancelled) return;
+          updateTabMeta(windowId, tabId, { address: meta.url, title: meta.title || meta.url });
+          if (document.activeElement !== addressInputRef.current) setAddressInput(meta.url);
+        })
+        .catch(() => {});
+    }
+    poll();
+    const t = setInterval(poll, 1500);
+    return () => {
+      cancelled = true;
+      clearInterval(t);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab?.id, activeTab?.mode, windowId]);
+
   if (!win || !activeTab) return null;
+
+  function doNavigate(addressValue: string) {
+    if (!activeTab) return;
+    navigate(windowId, activeTab.id, addressValue);
+    if (activeTab.mode === "full") {
+      const url = normalizeUrl(addressValue);
+      if (url) api.post(`/browser/full/${activeTab.id}/navigate`, { url }).catch(() => {});
+    }
+  }
 
   function onNavigate(e: FormEvent) {
     e.preventDefault();
-    if (!activeTab) return;
-    navigate(windowId, activeTab.id, addressInput);
+    doNavigate(addressInput);
   }
 
   function openBookmark(url: string) {
-    if (!activeTab) return;
     setAddressInput(url);
-    navigate(windowId, activeTab.id, url);
+    doNavigate(url);
   }
 
   function goBack() {
     if (!activeTab) return;
+    if (activeTab.mode === "full") {
+      api.post(`/browser/full/${activeTab.id}/back`).catch(() => {});
+      return;
+    }
     try {
       iframeRefs.current[activeTab.id]?.contentWindow?.history.back();
     } catch {
@@ -62,11 +104,24 @@ export function BrowserApp({ windowId, initialUrl, initialMode }: Props) {
 
   function goForward() {
     if (!activeTab) return;
+    if (activeTab.mode === "full") {
+      api.post(`/browser/full/${activeTab.id}/forward`).catch(() => {});
+      return;
+    }
     try {
       iframeRefs.current[activeTab.id]?.contentWindow?.history.forward();
     } catch {
       /* cross-origin edge case: ignore */
     }
+  }
+
+  function onReloadClick() {
+    if (!activeTab) return;
+    if (activeTab.mode === "full") {
+      api.post(`/browser/full/${activeTab.id}/reload`).catch(() => {});
+      return;
+    }
+    reload(windowId, activeTab.id);
   }
 
   async function confirmAddBookmark() {
@@ -80,34 +135,23 @@ export function BrowserApp({ windowId, initialUrl, initialMode }: Props) {
   return (
     <div className="browser-app">
       <form className="browser-toolbar" onSubmit={onNavigate}>
-        <button
-          type="button"
-          className="browser-icon-btn"
-          title="Précédent"
-          onClick={goBack}
-          disabled={activeTab.mode === "full"}
-        >
+        <button type="button" className="browser-icon-btn" title="Précédent" onClick={goBack}>
           ←
         </button>
-        <button
-          type="button"
-          className="browser-icon-btn"
-          title="Suivant"
-          onClick={goForward}
-          disabled={activeTab.mode === "full"}
-        >
+        <button type="button" className="browser-icon-btn" title="Suivant" onClick={goForward}>
           →
         </button>
         <button
           type="button"
           className="browser-icon-btn"
           title="Recharger"
-          onClick={() => reload(windowId, activeTab.id)}
+          onClick={onReloadClick}
           disabled={!activeTab.address}
         >
           ⟳
         </button>
         <input
+          ref={addressInputRef}
           placeholder="Entrer une adresse (ex: exemple.com)"
           value={addressInput}
           onChange={(e) => setAddressInput(e.target.value)}
@@ -122,6 +166,16 @@ export function BrowserApp({ windowId, initialUrl, initialMode }: Props) {
         >
           ☆
         </button>
+        {activeTab.mode === "full" && (
+          <button
+            type="button"
+            className="browser-icon-btn"
+            title="Coller depuis le presse-papiers"
+            onClick={() => remoteFrameRef.current?.paste()}
+          >
+            📋
+          </button>
+        )}
         <button
           type="button"
           className={`browser-mode-toggle ${activeTab.mode === "full" ? "active" : ""}`}
@@ -182,9 +236,9 @@ export function BrowserApp({ windowId, initialUrl, initialMode }: Props) {
         {activeTab.mode === "full" && (
           <RemoteFrame
             key={activeTab.id}
+            ref={remoteFrameRef}
             tabId={activeTab.id}
             initialUrl={normalizeUrl(activeTab.address) || "about:blank"}
-            navSeq={activeTab.navSeq}
           />
         )}
         {activeTab.mode !== "full" && !activeTab.src && (

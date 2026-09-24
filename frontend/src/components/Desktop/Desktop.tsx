@@ -66,6 +66,11 @@ export function Desktop() {
         forceNew: true,
         initialUrl: url,
         initialMode: item.fullMode ? "full" : undefined,
+        // Full mode has no live resize (see RemoteFrame) - open already at
+        // full size so the remote screen matches real available space
+        // from the first connection instead of starting small and later
+        // being scaled up (blurry, doesn't fill the screen properly).
+        maximized: item.fullMode,
       });
     }
   }

@@ -7,6 +7,11 @@ interface OpenOptions {
   initialMode?: BrowserTabMode;
   /** Open a brand-new window even if one for this appId is already open (used for the Navigateur launcher, never for Mail/Calendrier shortcuts). */
   forceNew?: boolean;
+  /** Open already maximized - used for full-mode app shortcuts, so the
+   * remote screen is sized to the real available space from the very
+   * first connection instead of a small default window that then looks
+   * blurry/zoomed once scaled up to fill the screen later. */
+  maximized?: boolean;
 }
 
 interface WindowState {
@@ -53,7 +58,7 @@ export const useWindowStore = create<WindowState>((set, get) => ({
       width: 760,
       height: 520,
       minimized: false,
-      maximized: false,
+      maximized: !!opts?.maximized,
       zIndex: z,
       initialUrl: opts?.initialUrl,
       initialTab: opts?.initialTab,
