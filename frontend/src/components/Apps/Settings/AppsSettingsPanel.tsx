@@ -10,12 +10,13 @@ import { AppIconGlyph } from "../../IconPicker/AppIconGlyph";
 import { IconPicker } from "../../IconPicker/IconPicker";
 import { useAppIcon, useAppIconsStore } from "../../../state/appIconsStore";
 import { useAuthStore } from "../../../state/authStore";
+import { useCustomAppsStore } from "../../../state/customAppsStore";
 import { useFileExplorerCategoriesStore } from "../../../state/fileExplorerCategoriesStore";
 import { useFileTypeIcon, useFileTypeIconsStore } from "../../../state/fileTypeIconsStore";
 import { saveDesktopState } from "../../../state/persistence";
 import { useSettingsStore } from "../../../state/settingsStore";
 import { useWindowStore } from "../../../state/windowStore";
-import type { FileSource } from "../../../types";
+import type { CustomApp, FileSource } from "../../../types";
 
 const FILE_TYPE_ORDER: FileTypeCategory[] = [
   "folder", "text", "pdf", "image", "video", "audio", "archive", "code", "generic",
@@ -293,6 +294,120 @@ function FileExplorerCategoriesSection() {
   );
 }
 
+function CustomAppRow({ app }: { app: CustomApp }) {
+  const { togglePinned, remove } = useCustomAppsStore();
+  const [picking, setPicking] = useState(false);
+
+  return (
+    <div className="file-category-pin">
+      <span>
+        <AppIconGlyph className="icon-glyph" icon={{ icon: app.icon, iconUrl: app.iconUrl }} /> {app.label}{" "}
+        <span className="settings-hint">({app.url})</span>
+      </span>
+      <div className="custom-app-actions">
+        <button className="settings-icon-btn" title="Changer l'icône" onClick={() => setPicking(true)}>
+          🖼
+        </button>
+        <label className="custom-app-pin-toggle">
+          <input
+            type="checkbox"
+            checked={app.pinned}
+            onChange={() => {
+              togglePinned(app.id);
+              saveDesktopState();
+            }}
+          />
+          Épinglée au menu Démarrer
+        </label>
+        <button
+          className="settings-icon-btn danger"
+          title="Supprimer"
+          onClick={() => {
+            if (window.confirm(`Supprimer l'application « ${app.label} » ?`)) {
+              remove(app.id);
+              saveDesktopState();
+            }
+          }}
+        >
+          🗑
+        </button>
+      </div>
+      {picking && (
+        <IconPicker
+          value={{ icon: app.icon, iconUrl: app.iconUrl }}
+          onChange={(v) => {
+            useCustomAppsStore.getState().setIcon(app.id, v);
+            saveDesktopState();
+          }}
+          onClose={() => setPicking(false)}
+          title={`Icône - ${app.label}`}
+        />
+      )}
+    </div>
+  );
+}
+
+function CustomAppsSection() {
+  const apps = useCustomAppsStore((s) => s.apps);
+  const add = useCustomAppsStore((s) => s.add);
+  const [name, setName] = useState("");
+  const [url, setUrl] = useState("");
+  const [pinned, setPinned] = useState(true);
+
+  function submit() {
+    const label = name.trim();
+    const target = url.trim();
+    if (!label || !target) return;
+    add({ label, url: target, icon: "🌐", pinned });
+    setName("");
+    setUrl("");
+    saveDesktopState();
+  }
+
+  return (
+    <>
+      <h4>Vos applications</h4>
+      <p className="settings-hint">
+        Ajoutez un raccourci vers un site (webmail, service auto-hébergé...) directement depuis le webdesktop -
+        choisissez si elle apparaît épinglée dans le menu Démarrer. Une application non épinglée reste
+        accessible via la recherche du menu Démarrer.
+      </p>
+
+      {apps.length === 0 ? (
+        <p className="settings-hint">Aucune application ajoutée pour l'instant.</p>
+      ) : (
+        <div className="file-category-pins">
+          {apps.map((a) => (
+            <CustomAppRow key={a.id} app={a} />
+          ))}
+        </div>
+      )}
+
+      <div className="file-category-add-pin">
+        <input
+          className="settings-input"
+          placeholder="Nom de l'application"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+        />
+        <input
+          className="settings-input"
+          placeholder="https://exemple.com"
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+        />
+        <label className="custom-app-pin-toggle">
+          <input type="checkbox" checked={pinned} onChange={(e) => setPinned(e.target.checked)} />
+          Épingler au menu Démarrer
+        </label>
+        <button className="settings-btn" onClick={submit} disabled={!name.trim() || !url.trim()}>
+          Ajouter
+        </button>
+      </div>
+    </>
+  );
+}
+
 function FileTypeIconsSection() {
   const setFileTypeIcon = useFileTypeIconsStore((s) => s.setOverride);
 
@@ -355,6 +470,8 @@ export function AppsSettingsPanel({ initialAppId }: Props) {
           <AppListRow key={id} appId={id} onClick={() => setSelected(id)} />
         ))}
       </div>
+
+      <CustomAppsSection />
     </div>
   );
 }

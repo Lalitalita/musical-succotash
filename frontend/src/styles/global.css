@@ -257,54 +257,122 @@ input {
   bottom: calc(var(--taskbar-height) + 10px);
   left: 50%;
   transform: translateX(-50%);
-  width: 460px;
-  max-height: 520px;
+  width: 340px;
+  max-height: 560px;
+  display: flex;
+  flex-direction: column;
   background: var(--surface);
   backdrop-filter: blur(30px) saturate(160%);
   -webkit-backdrop-filter: blur(30px) saturate(160%);
   border: 1px solid var(--border);
   border-radius: 12px;
   box-shadow: 0 24px 70px rgba(0, 0, 0, 0.5);
-  padding: 24px;
+  padding: 16px;
   z-index: 10000;
 }
 
 .start-menu h4 {
-  margin: 0 0 12px;
+  margin: 4px 0 8px;
   font-weight: 500;
   color: var(--text-dim);
-  font-size: 13px;
+  font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
 
-.start-menu-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
-  margin-bottom: 20px;
-}
-
-.start-tile {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  padding: 16px 8px;
+.start-search {
+  width: 100%;
+  padding: 9px 12px;
   border-radius: 8px;
-  border: none;
+  border: 1px solid var(--border);
   background: var(--surface-light);
   color: var(--text);
+  font-size: 13px;
+  outline: none;
+  flex-shrink: 0;
+}
+
+.start-search:focus {
+  border-color: var(--accent);
+}
+
+/* Compact list of rows instead of a grid of big square tiles - each row is
+ * icon + label, full width, so many pinned apps fit without wasting space
+ * on padding around an oversized icon. */
+.start-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow-y: auto;
+  max-height: 360px;
+  margin-bottom: 4px;
+}
+
+.start-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: var(--text);
   cursor: pointer;
-  font-size: 12px;
+  font-size: 13px;
+  text-align: left;
 }
 
-.start-tile:hover {
-  background: rgba(255, 255, 255, 0.16);
+.start-row:hover:not(:disabled) {
+  background: var(--surface-light);
 }
 
-.start-tile .icon-glyph {
-  font-size: 24px;
+.start-row:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.start-row .icon-glyph {
+  font-size: 18px;
+  flex-shrink: 0;
+  width: 20px;
+  text-align: center;
+}
+
+.start-search-results {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow-y: auto;
+  max-height: 400px;
+  margin: 4px 0;
+}
+
+.start-search-empty {
+  padding: 20px 8px;
+  text-align: center;
+  color: var(--text-dim);
+  font-size: 13px;
+}
+
+.start-row-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.start-row-label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.start-row-hint {
+  font-size: 11px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* An app-icon override can be an uploaded image instead of an emoji -
@@ -322,8 +390,11 @@ input {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 8px;
   border-top: 1px solid var(--border);
   padding-top: 14px;
+  margin-top: 8px;
+  flex-shrink: 0;
 }
 
 .start-user {
@@ -331,6 +402,14 @@ input {
   align-items: center;
   gap: 10px;
   font-size: 13px;
+  min-width: 0;
+}
+
+.start-user-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
 }
 
 .start-user .avatar-mini {
@@ -359,6 +438,7 @@ input {
   color: var(--text-dim);
   cursor: pointer;
   font-size: 13px;
+  flex-shrink: 0;
 }
 
 .logout-btn:hover {
@@ -1317,6 +1397,23 @@ table.attempts-table td {
 .icon-picker-cell.active {
   border-color: var(--accent);
   background: color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+.custom-app-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.custom-app-pin-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  cursor: pointer;
 }
 
 .icon-picker-upload {
@@ -2750,6 +2847,16 @@ img.file-icon {
   max-width: 90vw;
   display: flex;
   flex-direction: column;
+}
+
+.file-picker-header {
+  cursor: move;
+  user-select: none;
+  touch-action: none;
+}
+
+.file-picker-header.dragging {
+  cursor: grabbing;
 }
 
 .file-picker-body {

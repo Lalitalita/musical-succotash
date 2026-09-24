@@ -198,3 +198,27 @@ export interface DockerContainer {
   State: string;
   Ports: string;
 }
+
+/** A user-added shortcut to an external site, managed from Paramètres >
+ * Applications (distinct from a desktop icon - this is what makes an app
+ * show up, or not, in the Start Menu / its search). */
+export interface CustomApp {
+  id: string;
+  label: string;
+  icon: string;
+  iconUrl?: string;
+  url: string;
+  chromeless?: boolean;
+  fullMode?: boolean;
+  /** Shown in the Start Menu's "Épinglées" list; unpinned apps are still
+   * reachable through its search. */
+  pinned: boolean;
+}
+
+export interface IndexedFileResult {
+  source: FileSource;
+  path: string;
+  name: string;
+  is_dir: boolean;
+  size: number;
+}

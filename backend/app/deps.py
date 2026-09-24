@@ -23,6 +23,12 @@ _PRIVATE_NETWORKS = [
     ipaddress.ip_network("127.0.0.0/8"),
     ipaddress.ip_network("::1/128"),
     ipaddress.ip_network("fc00::/7"),
+    # RFC 6598 "shared address space" (CGNAT) - not in any of the RFC1918
+    # ranges above, but this is exactly the range Tailscale (and some ISPs'
+    # carrier-grade NAT) hands out by default, so a client connecting over a
+    # Tailscale VPN - the whole point of the "LAN/VPN" gate on Terminal/
+    # Docker - would otherwise be wrongly treated as a public IP and 403'd.
+    ipaddress.ip_network("100.64.0.0/10"),
 ]
 
 
@@ -72,9 +78,19 @@ def is_lan_or_whitelisted(ip: str) -> bool:
 def require_lan_or_whitelisted(request: Request) -> str:
     ip = get_client_ip(request)
     if not is_lan_or_whitelisted(ip):
+        # Naming the IP that got rejected turns "it just says Forbidden" into
+        # something self-service-fixable: if this really is a LAN/VPN client
+        # sitting behind a proxy chain or VPN range we don't already trust,
+        # adding this exact IP (or its CIDR) to ADMIN_IP_WHITELIST in the
+        # deployment's .env and restarting the backend is enough - no code
+        # change needed.
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="This endpoint is only reachable from the local network / VPN.",
+            detail=(
+                f"This endpoint is only reachable from the local network / VPN. "
+                f"Detected client IP: {ip}. If this is actually a trusted LAN/VPN "
+                f"address, add it (or its CIDR) to ADMIN_IP_WHITELIST."
+            ),
         )
     return ip
 

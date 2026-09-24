@@ -14,7 +14,7 @@ interface FileExplorerWindowState {
 
 interface FileExplorerStoreState {
   byWindow: Record<string, FileExplorerWindowState>;
-  ensureWindow: (windowId: string) => void;
+  ensureWindow: (windowId: string, initial?: { source: FileSource; path: string }) => void;
   addTab: (windowId: string) => void;
   closeTab: (windowId: string, tabId: string) => void;
   setActiveTab: (windowId: string, tabId: string) => void;
@@ -35,9 +35,9 @@ function makeTab(source: FileSource = "local", path = ""): ExplorerTab {
 export const useFileExplorerStore = create<FileExplorerStoreState>((set, get) => ({
   byWindow: {},
 
-  ensureWindow: (windowId) => {
+  ensureWindow: (windowId, initial) => {
     if (get().byWindow[windowId]) return;
-    const tab = makeTab();
+    const tab = makeTab(initial?.source, initial?.path);
     set((s) => ({ byWindow: { ...s.byWindow, [windowId]: { tabs: [tab], activeTabId: tab.id } } }));
   },
 

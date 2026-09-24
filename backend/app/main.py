@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
+from app.file_indexer import manager as file_indexer_manager
 from app.full_browser import manager as full_browser_manager
 from app.init_db import init_db
 from app.routers import (
@@ -21,6 +22,7 @@ from app.routers import (
     files,
     full_browser,
     notes,
+    search,
     security,
     sessions,
     terminal,
@@ -46,11 +48,13 @@ if settings.cors_origins_list:
 async def on_startup():
     init_db()
     await full_browser_manager.start()
+    await file_indexer_manager.start()
 
 
 @app.on_event("shutdown")
 async def on_shutdown():
     await full_browser_manager.stop()
+    await file_indexer_manager.stop()
     browser_proxy.close_http_client()
 
 
@@ -77,3 +81,4 @@ app.include_router(downloads.router)
 app.include_router(sessions.router)
 app.include_router(terminal.router)
 app.include_router(docker_manager.router)
+app.include_router(search.router)

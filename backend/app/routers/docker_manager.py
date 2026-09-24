@@ -1,18 +1,22 @@
 """Docker control panel: admin+LAN-gated, shells out to the `docker` CLI
 (already installed in this image for the self-update feature - see the
-Dockerfile) against the Docker socket mounted in by the opt-in
-docker-compose.dockerctl.yml overlay (a separate file, same convention as
-docker-compose.selfupdate.yml). Without that overlay the socket doesn't
-exist inside this container and every endpoint here reports Docker as
-unavailable - nothing here does anything by default.
+Dockerfile) against the Docker socket, which docker-compose.yml mounts into
+this container by default (see its `backend` service's `volumes:`). If
+`docker version` still fails here, it's almost always one of: (1) the
+container hasn't been recreated since pulling this version (the socket
+mount is new - `docker compose up -d --build` picks it up), or (2) the
+HOST's Docker daemon uses rootless mode or UID-remapping, in which case
+this container's root doesn't map to the host's socket owner and the
+mount's permissions block it - run this project's own Docker normally
+(no userns-remap) for Terminal/Docker to work out of the box.
 
-WARNING (see docker-compose.dockerctl.yml and the README): mounting the
+WARNING (see the README's "Terminal et Docker" section): mounting the
 Docker socket gives whoever can reach these endpoints root-equivalent
 control of the HOST, not just this container - start/stop/restart/logs for
 ANY container on the machine, this one included. Gated the same way every
-other high-privilege endpoint in this app is (admin + LAN-only), on top of
-the mount itself being opt-in and explicitly acknowledged by whoever
-enables it.
+other high-privilege endpoint in this app is (admin + LAN-only) - there is
+no separate opt-in flag for it, that trade-off was made deliberately (see
+docker-compose.yml's comment on the mount).
 """
 import asyncio
 import json
@@ -68,8 +72,10 @@ async def list_containers(user: User = Depends(get_current_admin), _ip: str = De
     if code != 0:
         raise HTTPException(
             status.HTTP_503_SERVICE_UNAVAILABLE,
-            "Docker n'est pas accessible depuis ce conteneur (voir docker-compose.dockerctl.yml) : "
-            + (err.strip()[:300] or "erreur inconnue"),
+            "Docker n'est pas accessible depuis ce conteneur. Si le conteneur backend n'a pas été "
+            "recréé depuis la mise à jour (docker compose up -d --build), c'est probablement ça. "
+            "Sinon, vérifiez que le démon Docker de l'hôte n'utilise pas le mode rootless / "
+            "userns-remap (voir le README) : " + (err.strip()[:300] or "erreur inconnue"),
         )
     containers = []
     for line in out.splitlines():

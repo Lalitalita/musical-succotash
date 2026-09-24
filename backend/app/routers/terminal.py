@@ -52,7 +52,19 @@ async def proxy_http(
 ) -> Response:
     ip = get_client_ip(request)
     if not is_lan_or_whitelisted(ip):
-        return Response(status_code=status.HTTP_403_FORBIDDEN, content="Forbidden")
+        # Naming the detected IP turns a bare "Forbidden" into something
+        # self-service-fixable from ADMIN_IP_WHITELIST alone - see
+        # app/deps.py's require_lan_or_whitelisted for the same message on
+        # every other admin+LAN-gated endpoint (this one can't use that
+        # dependency directly since get_current_admin must run first).
+        return Response(
+            status_code=status.HTTP_403_FORBIDDEN,
+            content=(
+                f"This endpoint is only reachable from the local network / VPN. "
+                f"Detected client IP: {ip}. If this is actually a trusted LAN/VPN "
+                f"address, add it (or its CIDR) to ADMIN_IP_WHITELIST."
+            ),
+        )
 
     upstream_url = f"{_TTYD_HTTP}{request.url.path}"
     if request.url.query:
@@ -116,7 +128,7 @@ async def terminal_ws(websocket: WebSocket):
 
     ip = get_client_ip(websocket)
     if not is_lan_or_whitelisted(ip):
-        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason=f"LAN/VPN only (detected IP: {ip})")
         return
 
     # ttyd's JS client requests the "tty" subprotocol - echo whatever the

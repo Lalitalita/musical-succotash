@@ -73,6 +73,7 @@ export function Window({ win, children, titlebarContent }: Props) {
     <div
       className={`app-window ${win.maximized ? "maximized" : ""}`}
       style={style}
+      data-window-id={win.id}
       onPointerDown={() => focusWindow(win.id)}
     >
       <div

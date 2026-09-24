@@ -43,10 +43,14 @@ Internet ──HTTPS──▶ Nginx externe (TLS, hors de ce dépôt)
 - **PostgreSQL** et **Redis** vivent sur un second réseau `data`
   (`internal: true`, sans passerelle du tout) : ils ne parlent qu'au backend
   et n'ont besoin d'aucun accès sortant.
-- Les endpoints `/api/admin/security/*` (dashboard) ne répondent que si
-  l'adresse IP réelle du client (reconstituée depuis la chaîne
-  `X-Forwarded-For`, voir `TRUSTED_PROXY_HOPS`) appartient à un réseau privé
-  (RFC1918/loopback) ou à `ADMIN_IP_WHITELIST`.
+- Les endpoints `/api/admin/security/*`, ainsi que Terminal et Docker, ne
+  répondent que si l'adresse IP réelle du client (reconstituée depuis la
+  chaîne `X-Forwarded-For`, voir `TRUSTED_PROXY_HOPS`) appartient à un
+  réseau privé (RFC1918/loopback, ainsi que `100.64.0.0/10` - la plage CGNAT
+  qu'utilise notamment Tailscale par défaut) ou à `ADMIN_IP_WHITELIST`. Si
+  vous accédez depuis un VPN dont la plage n'est dans aucune de ces
+  catégories, le 403 renvoyé indique l'IP détectée : ajoutez-la (ou son
+  CIDR) à `ADMIN_IP_WHITELIST` dans `.env` et redémarrez le backend.
 
 ## Démarrage
 
@@ -474,17 +478,34 @@ ligne `UserSession` en base, dont l'id est embarqué dans le JWT (claim
 cette fonctionnalité, un cookie de session restait valide jusqu'à son
 expiration naturelle, sans aucun moyen de le révoquer à distance.
 
-## Recherche globale (Ctrl+K)
+## Recherche globale (Ctrl+K, et dans le menu Démarrer)
 
-La barre de recherche de la barre des tâches (ou `Ctrl+K`/`Cmd+K` depuis
-n'importe où) ouvre une liste de résultats couvrant les applications, les
-onglets de Paramètres, les favoris du navigateur et vos notes - taper
-"sécu" par exemple remonte aussi bien l'app Sécurité que l'onglet
-Paramètres → Sécurité. Clic ou `Entrée` sur un résultat l'ouvre directement
-(une note ouvre l'app Notes avec cette note déjà sélectionnée). Tout se
-fait côté client à partir de données déjà chargées (favoris, notes) ou
-statiques (liste des apps/onglets) - pas de nouvel endpoint de recherche
-côté serveur, donc pas encore d'indexation du contenu des fichiers.
+La barre de recherche de la barre des tâches (`Ctrl+K`/`Cmd+K` depuis
+n'importe où) et celle intégrée en haut du menu Démarrer partagent exactement
+la même logique (`frontend/src/state/searchResults.ts`) et couvrent :
+
+- les applications (y compris vos applications personnalisées, voir
+  ci-dessous), les onglets de Paramètres, les favoris et vos notes ;
+- une **calculatrice** : taper une expression comme `240/3` affiche
+  directement le résultat, `Entrée` le copie dans le presse-papiers ;
+- vos **fichiers et dossiers** (Local + partage SMB), via un petit
+  index construit en tâche de fond par le backend (`app/file_indexer.py`,
+  table `indexed_files`) - reconstruit au démarrage puis toutes les
+  `FILE_INDEX_INTERVAL_SECONDS` (5 min par défaut), donc un fichier tout
+  juste créé peut mettre jusqu'à ce délai avant d'apparaître dans la
+  recherche. `Entrée`/clic sur un résultat fichier l'ouvre (téléchargement
+  pour un fichier, navigation de l'Explorateur pour un dossier).
+
+## Vos applications (Paramètres → Applications)
+
+En plus des apps intégrées, vous pouvez ajouter vos propres raccourcis vers
+un site (webmail, service auto-hébergé...) directement depuis
+Paramètres → Applications → "Vos applications" : donnez-lui un nom et une
+URL, et choisissez si elle doit apparaître épinglée dans le menu Démarrer.
+Une application non épinglée reste malgré tout accessible via la recherche
+ci-dessus. C'est un mécanisme différent des icônes de bureau (qui peuvent
+pointer vers un fichier, un dossier ou une app existante) : celui-ci sert
+spécifiquement à enrichir le menu Démarrer.
 
 ## Arborescence
 

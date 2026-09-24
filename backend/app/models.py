@@ -155,6 +155,29 @@ class SecurityAlert(Base):
     ip_address: Mapped[str] = mapped_column(String(64), nullable=True)
 
 
+class IndexedFile(Base):
+    """One file/folder found by the background indexer (app/file_indexer.py)
+    under a user's Local storage or the shared SMB share - powers the Start
+    Menu's file search without walking the filesystem on every keystroke.
+    Rebuilt wholesale per scope on each reindex pass (delete + bulk insert),
+    not incrementally updated - simplest thing that stays correct without
+    tracking individual file-explorer mutations."""
+
+    __tablename__ = "indexed_files"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    # NULL = the shared SMB share (not owned by any one user); otherwise the
+    # user whose private Local storage this entry belongs to.
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=True, index=True)
+    source: Mapped[str] = mapped_column(String(8), nullable=False)  # "local" | "smb"
+    path: Mapped[str] = mapped_column(String(1024), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    name_lower: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    is_dir: Mapped[bool] = mapped_column(Boolean, default=False)
+    size: Mapped[int] = mapped_column(Integer, default=0)
+    indexed_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
 class AttemptStatus(str, enum.Enum):
     PASSWORD_FAIL = "password_fail"
     PASSWORD_OK = "password_ok"

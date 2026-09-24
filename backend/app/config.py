@@ -108,6 +108,12 @@ class Settings(BaseSettings):
     terminal_host: str = "terminal"
     terminal_port: int = 7681
 
+    # --- File search index (app/file_indexer.py): a background job walks
+    # every user's Local storage plus the shared SMB share (if configured)
+    # into a searchable table, powering the Start Menu's file search. ---
+    file_index_interval_seconds: int = 300
+    file_index_max_entries_per_scope: int = 50_000
+
     # --- Self-update (opt-in, requires the docker.sock + host-dir mount from
     # docker-compose.selfupdate.yml - see README, this grants the backend
     # root-equivalent control of the host). ---

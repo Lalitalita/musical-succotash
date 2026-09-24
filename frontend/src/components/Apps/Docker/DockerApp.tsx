@@ -66,11 +66,8 @@ export function DockerApp() {
     <div className="docker-app">
       {available === false && (
         <div className="docker-unavailable">
-          <p>Docker n'est pas accessible depuis ce conteneur.</p>
-          <p className="settings-hint">
-            Ajoutez l'overlay docker-compose.dockerctl.yml pour activer cette app (voir le README) - elle
-            donne un accès root-équivalent à la machine hôte, à n'utiliser qu'en connaissance de cause.
-          </p>
+          <p>Docker n'est pas accessible.</p>
+          <p className="settings-hint">{error || "Erreur inconnue."}</p>
         </div>
       )}
 

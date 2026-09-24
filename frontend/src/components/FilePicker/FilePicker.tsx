@@ -1,4 +1,4 @@
-import { ChangeEvent, useRef, useState } from "react";
+import { ChangeEvent, PointerEvent, useRef, useState } from "react";
 import { api } from "../../api/client";
 import { FileRowIcon, formatDate, formatSize, Sidebar, joinPath } from "../Apps/FileExplorer/FileExplorerApp";
 import { useFileListing } from "../../state/useFileListing";
@@ -35,6 +35,33 @@ export function FilePicker({ title, accept, onSelect, onClose }: Props) {
   const { entries, loading, error, smbUnconfigured, reload, base } = useFileListing(source, path);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
+
+  // The modal is centered by `.modal-overlay`'s flex layout by default (0,0
+  // offset below); dragging the header just adds a translate() on top of
+  // that centering instead of switching to absolute positioning, so it
+  // never needs to know its own size to stay centered on first open.
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const dragOrigin = useRef({ mouseX: 0, mouseY: 0, offX: 0, offY: 0 });
+  const [dragging, setDragging] = useState(false);
+
+  function onHeaderPointerDown(e: PointerEvent) {
+    setDragging(true);
+    dragOrigin.current = { mouseX: e.clientX, mouseY: e.clientY, offX: dragOffset.x, offY: dragOffset.y };
+    (e.target as Element).setPointerCapture(e.pointerId);
+  }
+
+  function onHeaderPointerMove(e: PointerEvent) {
+    if (!dragging) return;
+    setDragOffset({
+      x: dragOrigin.current.offX + (e.clientX - dragOrigin.current.mouseX),
+      y: dragOrigin.current.offY + (e.clientY - dragOrigin.current.mouseY),
+    });
+  }
+
+  function onHeaderPointerUp(e: PointerEvent) {
+    setDragging(false);
+    (e.target as Element).releasePointerCapture(e.pointerId);
+  }
 
   function navigate(nextSource: FileSource, nextPath: string) {
     setSource(nextSource);
@@ -88,8 +115,19 @@ export function FilePicker({ title, accept, onSelect, onClose }: Props) {
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-card file-picker" onClick={(e) => e.stopPropagation()}>
-        <h3>{title || "Choisir un fichier"}</h3>
+      <div
+        className="modal-card file-picker"
+        style={{ transform: `translate(${dragOffset.x}px, ${dragOffset.y}px)` }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h3
+          className={`file-picker-header ${dragging ? "dragging" : ""}`}
+          onPointerDown={onHeaderPointerDown}
+          onPointerMove={onHeaderPointerMove}
+          onPointerUp={onHeaderPointerUp}
+        >
+          {title || "Choisir un fichier"}
+        </h3>
 
         <div className="file-picker-body">
           <Sidebar activeSource={source} activePath={path} onNavigate={navigate} />

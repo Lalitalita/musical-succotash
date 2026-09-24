@@ -3,6 +3,7 @@ import type { AppMetaId, FileTypeCategory } from "../constants/icons";
 import { DEFAULT_SETTINGS, type AppId, type BrowserTab, type DesktopItem, type DesktopSettings, type WindowInstance } from "../types";
 import { type IconOverride, useAppIconsStore } from "./appIconsStore";
 import { useBrowserStore } from "./browserStore";
+import { useCustomAppsStore } from "./customAppsStore";
 import { useDesktopItemsStore } from "./desktopItemsStore";
 import { useFileExplorerCategoriesStore, type FileExplorerCategory } from "./fileExplorerCategoriesStore";
 import { useFileExplorerStore, type ExplorerTab } from "./fileExplorerStore";
@@ -11,6 +12,7 @@ import { type BankIcon, useIconBankStore } from "./iconBankStore";
 import { usePinnedAppsStore } from "./pinnedAppsStore";
 import { useSettingsStore } from "./settingsStore";
 import { useWindowStore } from "./windowStore";
+import type { CustomApp } from "../types";
 
 interface DesktopBlob {
   windows: WindowInstance[];
@@ -23,6 +25,7 @@ interface DesktopBlob {
   customIcons: BankIcon[];
   fileExplorerCategories: FileExplorerCategory[];
   fileExplorerTabs: Record<string, { tabs: ExplorerTab[]; activeTabId: string }>;
+  customApps: CustomApp[];
 }
 
 export function collectDesktopState(): DesktopBlob {
@@ -51,6 +54,7 @@ export function collectDesktopState(): DesktopBlob {
     pinnedApps: usePinnedAppsStore.getState().pinned,
     customIcons: useIconBankStore.getState().customIcons,
     fileExplorerCategories: useFileExplorerCategoriesStore.getState().categories,
+    customApps: useCustomAppsStore.getState().apps,
   };
 }
 
@@ -96,6 +100,9 @@ export async function restoreDesktopState(): Promise<void> {
     }
     if (Array.isArray(state.fileExplorerCategories)) {
       useFileExplorerCategoriesStore.getState().hydrate(state.fileExplorerCategories);
+    }
+    if (Array.isArray(state.customApps)) {
+      useCustomAppsStore.getState().hydrate(state.customApps);
     }
   } catch (e) {
     if (!(e instanceof ApiError)) throw e;
