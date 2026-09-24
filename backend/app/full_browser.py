@@ -186,7 +186,18 @@ class FullBrowserManager:
 
             x11vnc_proc = await asyncio.create_subprocess_exec(
                 "x11vnc", "-display", f":{display_num}", "-rfbport", str(vnc_port),
-                "-localhost", "-forever", "-shared", "-noxdamage", "-nopw", "-quiet",
+                "-localhost", "-forever", "-shared", "-nopw", "-quiet",
+                # XDAMAGE (on by default - deliberately NOT passing
+                # -noxdamage) is what makes this event-driven: x11vnc gets
+                # told exactly which pixels changed the instant they do,
+                # instead of periodically diffing the whole framebuffer on
+                # a timer. -threads splits input/output handling onto
+                # separate threads so a burst of mouse/keyboard events
+                # can't stall the next screen update behind it. Verified
+                # locally (Xvfb+Chromium+x11vnc, a continuously animating
+                # page) that incremental updates keep arriving promptly
+                # with this combination.
+                "-threads",
                 stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL,
             )
             await self._wait_for_tcp(vnc_port)

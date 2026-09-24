@@ -44,6 +44,13 @@ export function RemoteFrame({ tabId, initialUrl, navSeq }: Props) {
     // asking the (xrandr-less) virtual display to actually resize.
     rfb.scaleViewport = true;
     rfb.resizeSession = false;
+    // Favor responsiveness over pixel-perfect quality: a lower
+    // compressionLevel means x11vnc spends less CPU zlib-compressing each
+    // update before sending it (the default (2) noticeably added to the
+    // send-then-see-it lag), at the cost of slightly larger frames - a good
+    // trade on a LAN. qualityLevel trimmed a notch for the same reason.
+    rfb.qualityLevel = 5;
+    rfb.compressionLevel = 1;
     rfbRef.current = rfb;
 
     rfb.addEventListener("connect", () => setStatus("open"));
