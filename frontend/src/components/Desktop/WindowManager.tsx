@@ -7,7 +7,6 @@ import { FileExplorerApp } from "../Apps/FileExplorer/FileExplorerApp";
 import { FileExplorerTabBar } from "../Apps/FileExplorer/FileExplorerTabBar";
 import { NotesApp } from "../Apps/Notes/NotesApp";
 import { SecurityDashboard } from "../Apps/SecurityDashboard/SecurityDashboard";
-import { SessionsApp } from "../Apps/Sessions/SessionsApp";
 import { SettingsApp } from "../Apps/Settings/SettingsApp";
 import { TerminalApp } from "../Apps/Terminal/TerminalApp";
 import { Window } from "./Window";
@@ -41,7 +40,6 @@ export function WindowManager() {
           {win.appId === "files" && <FileExplorerApp windowId={win.id} />}
           {win.appId === "notes" && <NotesApp initialNoteId={win.initialNoteId} />}
           {win.appId === "downloads" && <DownloadsApp />}
-          {win.appId === "sessions" && <SessionsApp />}
           {win.appId === "terminal" && <TerminalApp />}
           {win.appId === "dockerctl" && <DockerApp />}
         </Window>

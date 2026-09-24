@@ -7,6 +7,7 @@ from typing import Optional
 
 from fastapi import Cookie, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
+from starlette.requests import HTTPConnection
 
 from app.config import get_settings
 from app.database import get_db
@@ -25,17 +26,22 @@ _PRIVATE_NETWORKS = [
 ]
 
 
-def get_client_ip(request: Request) -> str:
+def get_client_ip(conn: HTTPConnection) -> str:
     """Resolve the real client IP through the trusted reverse-proxy chain.
 
     X-Forwarded-For is appended to by every hop: "client, proxy1, proxy2, ...".
     We trust exactly `settings.trusted_proxy_hops` hops closest to us (the
     frontend's internal Nginx + the external TLS-terminating Nginx) and take
     the IP immediately preceding them as the real client.
+
+    Takes an `HTTPConnection` (the common base of both `Request` and
+    `WebSocket`) so the exact same logic applies to WebSocket endpoints,
+    which can't use `Request`-typed FastAPI dependencies - see
+    app/routers/terminal.py.
     """
-    xff = request.headers.get("x-forwarded-for")
+    xff = conn.headers.get("x-forwarded-for")
     if not xff:
-        return request.client.host if request.client else "0.0.0.0"
+        return conn.client.host if conn.client else "0.0.0.0"
 
     chain = [p.strip() for p in xff.split(",") if p.strip()]
     hops = max(settings.trusted_proxy_hops, 0)
@@ -45,7 +51,7 @@ def get_client_ip(request: Request) -> str:
     return chain[idx]
 
 
-def _is_whitelisted(ip: str) -> bool:
+def is_lan_or_whitelisted(ip: str) -> bool:
     try:
         addr = ipaddress.ip_address(ip)
     except ValueError:
@@ -65,7 +71,7 @@ def _is_whitelisted(ip: str) -> bool:
 
 def require_lan_or_whitelisted(request: Request) -> str:
     ip = get_client_ip(request)
-    if not _is_whitelisted(ip):
+    if not is_lan_or_whitelisted(ip):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="This endpoint is only reachable from the local network / VPN.",

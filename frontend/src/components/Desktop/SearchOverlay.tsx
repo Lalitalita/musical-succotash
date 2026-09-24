@@ -31,7 +31,6 @@ const SEARCHABLE_APPS: { id: AppId; adminOnly?: boolean }[] = [
   { id: "files" },
   { id: "notes" },
   { id: "downloads" },
-  { id: "sessions" },
   { id: "settings" },
   { id: "security-dashboard", adminOnly: true },
   { id: "terminal", adminOnly: true },

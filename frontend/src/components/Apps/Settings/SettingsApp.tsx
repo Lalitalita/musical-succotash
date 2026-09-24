@@ -1,6 +1,7 @@
-import { ChangeEvent, useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { api } from "../../../api/client";
 import type { AppMetaId } from "../../../constants/icons";
+import { FilePicker, type PickedFile } from "../../FilePicker/FilePicker";
 import { saveDesktopState } from "../../../state/persistence";
 import { useAuthStore } from "../../../state/authStore";
 import { useSettingsStore } from "../../../state/settingsStore";
@@ -47,8 +48,8 @@ export function SettingsApp({ initialTab }: Props) {
   const [uploadingWallpaper, setUploadingWallpaper] = useState(false);
   const [resetDone, setResetDone] = useState(false);
   const [health, setHealth] = useState<"checking" | "ok" | "down">("checking");
-  const fileInput = useRef<HTMLInputElement>(null);
-  const wallpaperFileInput = useRef<HTMLInputElement>(null);
+  const [pickingAvatar, setPickingAvatar] = useState(false);
+  const [pickingWallpaper, setPickingWallpaper] = useState(false);
 
   useEffect(() => {
     if (!initialTab) return;
@@ -65,13 +66,10 @@ export function SettingsApp({ initialTab }: Props) {
       .catch(() => setHealth("down"));
   }, []);
 
-  async function onAvatarChange(e: ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  async function onAvatarPicked(file: PickedFile) {
     setSavingAvatar(true);
     try {
-      const { url } = await api.upload("/uploads", file);
-      await updateProfile({ avatar_url: url });
+      await updateProfile({ avatar_url: file.url });
     } finally {
       setSavingAvatar(false);
     }
@@ -81,17 +79,18 @@ export function SettingsApp({ initialTab }: Props) {
     await updateProfile({ display_name: displayName });
   }
 
-  async function onWallpaperFileChange(e: ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  async function onWallpaperPicked(file: PickedFile) {
     setUploadingWallpaper(true);
     try {
-      const { url } = await api.upload("/uploads", file);
-      settings.update({ wallpaper: "custom-image", wallpaperImageUrl: url });
+      settings.update({ wallpaper: "custom-image", wallpaperImageUrl: file.url });
       await saveDesktopState();
     } finally {
       setUploadingWallpaper(false);
     }
+  }
+
+  function isImageEntry(entry: { name: string }): boolean {
+    return /\.(png|jpe?g|gif|webp|svg|bmp)$/i.test(entry.name);
   }
 
   function onWallpaperColorChange(color: string) {
@@ -126,7 +125,7 @@ export function SettingsApp({ initialTab }: Props) {
           <div>
             <h4>Profil</h4>
             <div className="settings-avatar-row">
-              <div className="settings-avatar" onClick={() => fileInput.current?.click()}>
+              <div className="settings-avatar" onClick={() => setPickingAvatar(true)}>
                 {me?.avatar_url ? (
                   <img src={me.avatar_url} alt="avatar" />
                 ) : (
@@ -134,10 +133,9 @@ export function SettingsApp({ initialTab }: Props) {
                 )}
               </div>
               <div>
-                <button className="settings-btn" onClick={() => fileInput.current?.click()} disabled={savingAvatar}>
+                <button className="settings-btn" onClick={() => setPickingAvatar(true)} disabled={savingAvatar}>
                   {savingAvatar ? "Envoi..." : "Changer la photo"}
                 </button>
-                <input ref={fileInput} type="file" accept="image/*" hidden onChange={onAvatarChange} />
               </div>
             </div>
 
@@ -193,12 +191,11 @@ export function SettingsApp({ initialTab }: Props) {
                 style={
                   settings.wallpaperImageUrl ? { backgroundImage: `url(${settings.wallpaperImageUrl})` } : undefined
                 }
-                onClick={() => wallpaperFileInput.current?.click()}
+                onClick={() => setPickingWallpaper(true)}
                 disabled={uploadingWallpaper}
               >
                 <span>{uploadingWallpaper ? "Envoi..." : "Image personnalisée"}</span>
               </button>
-              <input ref={wallpaperFileInput} type="file" accept="image/*" hidden onChange={onWallpaperFileChange} />
             </div>
 
             <h4>Couleur d'accent</h4>
@@ -276,6 +273,23 @@ export function SettingsApp({ initialTab }: Props) {
           </div>
         )}
       </div>
+
+      {pickingAvatar && (
+        <FilePicker
+          title="Choisir une photo de profil"
+          accept={isImageEntry}
+          onSelect={onAvatarPicked}
+          onClose={() => setPickingAvatar(false)}
+        />
+      )}
+      {pickingWallpaper && (
+        <FilePicker
+          title="Choisir une image de fond d'écran"
+          accept={isImageEntry}
+          onSelect={onWallpaperPicked}
+          onClose={() => setPickingWallpaper(false)}
+        />
+      )}
     </div>
   );
 }

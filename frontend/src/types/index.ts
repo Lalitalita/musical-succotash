@@ -13,7 +13,6 @@ export type AppId =
   | "files"
   | "notes"
   | "downloads"
-  | "sessions"
   | "terminal"
   | "dockerctl";
 

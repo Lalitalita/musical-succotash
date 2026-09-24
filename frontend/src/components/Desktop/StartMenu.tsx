@@ -20,9 +20,9 @@ const APPS: { id: AppId; adminOnly?: boolean }[] = [
   { id: "settings" },
   { id: "notes" },
   { id: "downloads" },
-  { id: "sessions" },
-  // Root-equivalent host access (see docker-compose.dockerctl.yml) - admin
-  // accounts only, same gate the backend itself enforces on every request.
+  // Root-equivalent host access (see README's "Terminal et Docker") -
+  // admin accounts only, same gate the backend itself enforces on every
+  // request.
   { id: "terminal", adminOnly: true },
   { id: "dockerctl", adminOnly: true },
 ];

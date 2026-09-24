@@ -4,9 +4,9 @@ Bureau virtuel ("Web Desktop") auto-hébergé, conteneurisé, avec authentificat
 forte et second facteur déguisé, dashboard de sécurité réservé au LAN, un
 "navigateur distant" (mode texte et mode complet), un explorateur de fichiers,
 des notes, une recherche globale, des téléchargements côté serveur, une
-gestion des sessions actives, et deux apps opt-in à accès root (Terminal,
-Docker) pour qui veut aussi piloter le reste de sa machine depuis le même
-bureau.
+gestion des sessions actives, et deux apps à accès root sur l'hôte
+(Terminal, Docker - voir "Notes de sécurité") pour qui veut aussi piloter
+le reste de sa machine depuis le même bureau.
 
 Déploiement 100 % automatisé derrière un reverse-proxy Nginx externe qui gère
 déjà le TLS.
@@ -465,11 +465,11 @@ en cours), plafonné à 5 Go par fichier.
 
 ## Sessions actives
 
-Une app "Sessions" (`/api/sessions`) liste les appareils actuellement
-connectés à votre compte (IP, navigateur, date de connexion, dernière
-activité) et permet d'en déconnecter un à distance - pratique si vous vous
-êtes laissé connecté quelque part. Techniquement : chaque connexion crée
-une ligne `UserSession` en base, dont l'id est embarqué dans le JWT (claim
+Paramètres → Sécurité liste les appareils actuellement connectés à votre
+compte (IP, navigateur, date de connexion, dernière activité, `/api/sessions`)
+et permet d'en déconnecter un à distance - pratique si vous vous êtes
+laissé connecté quelque part. Techniquement : chaque connexion crée une
+ligne `UserSession` en base, dont l'id est embarqué dans le JWT (claim
 `sid`) et vérifié à **chaque** requête authentifiée (`app/deps.py`) - avant
 cette fonctionnalité, un cookie de session restait valide jusqu'à son
 expiration naturelle, sans aucun moyen de le révoquer à distance.
@@ -492,8 +492,7 @@ côté serveur, donc pas encore d'indexation du contenu des fichiers.
 .
 ├── docker-compose.yml
 ├── docker-compose.selfupdate.yml   # overlay opt-in: mise à jour auto (accès root hôte)
-├── docker-compose.dockerctl.yml    # overlay opt-in: apps Terminal + Docker (accès root hôte)
-├── terminal/                       # image ttyd + docker-cli (app "Terminal")
+├── terminal/                       # image ttyd (app "Terminal", accès root hôte - actif par défaut)
 ├── .env.example
 ├── backend/
 │   ├── Dockerfile
@@ -541,7 +540,7 @@ côté serveur, donc pas encore d'indexation du contenu des fichiers.
         │   ├── Desktop/{Desktop,Taskbar,StartMenu,ClockFlyout,ContextMenu,
         │   │            SearchOverlay,NewShortcutForm,Window,WindowManager}.tsx
         │   └── Apps/{BrowserApp(+RemoteFrame),SecurityDashboard,Settings(+UsersPanel),
-        │             FileExplorer,Notes,Downloads,Sessions,Terminal,Docker}/
+        │             FileExplorer,Notes,Downloads,Terminal,Docker}/
         └── styles/global.css     # thème Windows 11 (acrylique/mica)
 ```
 
@@ -612,38 +611,40 @@ le rester tant que vous n'avez pas conscience de ce qu'il implique :
 - Sauvegardes déposées dans le volume `backend-backups` (dump SQL Postgres
   + archive des fichiers utilisateurs), à chaque mise à jour.
 
-## Terminal et Docker (opt-in, donne un accès root à l'hôte)
+## Terminal et Docker (accès root à l'hôte, actif par défaut)
 
-Deux apps réservées aux comptes admin, **désactivées par défaut**, qui
-donnent le même type d'accès que la mise à jour automatique ci-dessus - un
-contrôle root-équivalent de la machine hôte, pas seulement du conteneur.
-Ne les activez que si vous en avez besoin et en comprenez les implications :
+Deux apps réservées aux comptes admin qui donnent un contrôle
+root-équivalent de la machine hôte, pas seulement du conteneur backend -
+même trade-off que la mise à jour automatique ci-dessus, mais **intégrées
+directement dans `docker-compose.yml`** plutôt que dans un overlay séparé à
+activer manuellement : un `docker compose up -d --build` classique suffit,
+les deux apps fonctionnent immédiatement. Choix assumé, fait à la demande
+de l'utilisatrice de ce déploiement - voir "Notes de sécurité" ci-dessous
+si vous préférez repartir sur un modèle opt-in pour votre propre fork.
 
 - **🐳 Docker** : liste des conteneurs (statut, image, ports), logs (300
   dernières lignes), démarrer/arrêter/redémarrer, stats CPU/RAM en direct -
   un mini Portainer suffisant pour surveiller/relancer ses propres services
-  sans quitter le webdesktop.
+  sans quitter le webdesktop. Côté API
+  (`backend/app/routers/docker_manager.py`), appelle simplement le CLI
+  `docker` déjà présent dans l'image du backend (utilisé aussi par la mise
+  à jour auto) - pas de dépendance Python supplémentaire.
 - **💻 Terminal** : un vrai shell interactif dans le navigateur (via
-  [ttyd](https://github.com/tsl0922/ttyd)), avec `docker`/`docker exec`
-  disponibles pour atteindre n'importe quel autre conteneur de la machine.
-- Les deux passent par le même overlay Docker Compose que la mise à jour
-  automatique (mêmes principes, fichier séparé) :
-  ```bash
-  docker compose -f docker-compose.yml -f docker-compose.dockerctl.yml \
-    --profile dockerctl up -d --build
-  ```
-  Sans cet overlay, "Docker" affiche juste "indisponible" et "Terminal" est
-  un shell vide sans aucun accès Docker - rien ne fonctionne par défaut.
-- Gating : réservées aux comptes admin **et** au réseau local/VPN (même
-  garde-fou que le reste des endpoints sensibles de l'appli -
-  `backend/app/deps.py`). Le Terminal n'est jamais exposé directement : tout
-  passe par le Nginx du frontend, qui vérifie ces deux conditions via un
-  `auth_request` avant même de relayer le WebSocket vers le conteneur ttyd
-  (`frontend/nginx.conf`, `backend/app/routers/terminal.py`) - ttyd
-  lui-même n'écoute que sur le réseau Docker interne, jamais publié.
-- Côté API (`backend/app/routers/docker_manager.py`), "Docker" appelle
-  simplement le CLI `docker` déjà présent dans l'image du backend (utilisé
-  aussi par la mise à jour auto) - pas de dépendance Python supplémentaire.
+  [ttyd](https://github.com/tsl0922/ttyd), conteneur `terminal` -
+  `terminal/Dockerfile`), avec `docker`/`docker exec` disponibles pour
+  atteindre n'importe quel autre conteneur de la machine.
+- Le conteneur `terminal` n'est jamais exposé sur le réseau `public` ni sur
+  l'hôte - il n'est reachable QUE depuis `backend`, sur le réseau
+  `internal`. Tout le trafic (pages HTML/JS de ttyd, WebSocket du
+  terminal) passe par un relai Python dans le backend
+  (`backend/app/routers/terminal.py`), qui applique la même dépendance
+  admin+LAN que chaque autre endpoint sensible de l'appli
+  (`backend/app/deps.py`) **avant** de relayer le moindre octet - y
+  compris pour la mise à niveau WebSocket, vérifiée manuellement puisqu'un
+  endpoint WebSocket ne peut pas utiliser les dépendances FastAPI classiques
+  (même construction que `backend/app/routers/full_browser.py`). Testé de
+  bout en bout (proxy HTTP + relai WebSocket bidirectionnel contre une
+  vraie instance ttyd) avant publication.
 
 ## Notes de sécurité
 
@@ -675,3 +676,13 @@ Ne les activez que si vous en avez besoin et en comprenez les implications :
   frontend : n'importe qui pouvant atteindre ce port ET connaissant
   `SOCKS5_USER`/`SOCKS5_PASSWORD` peut faire sortir du trafic par ce Debian
   - gardez ce mot de passe aussi solide que les autres secrets de `.env`.
+- **Terminal et Docker sont actifs par défaut** (contrairement à la mise à
+  jour automatique, qui reste opt-in) et montent le socket Docker de
+  l'hôte dans `backend` et `terminal` - root-équivalent sur toute la
+  machine pour quiconque a un compte admin et accède depuis le LAN/VPN.
+  C'est un choix délibéré pour ce déploiement (voir la section "Terminal
+  et Docker"). Si vous forkez ce projet pour un usage où vous NE voulez PAS
+  de cet accès par défaut, retirez les deux blocs `docker.sock` de
+  `docker-compose.yml` (services `backend` et `terminal`) et remettez-les
+  dans un fichier overlay séparé, sur le modèle de
+  `docker-compose.selfupdate.yml`.

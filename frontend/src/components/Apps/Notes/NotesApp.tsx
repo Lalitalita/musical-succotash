@@ -1,9 +1,13 @@
+import DOMPurify from "dompurify";
+import { marked } from "marked";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { openContextMenu } from "../../../state/contextMenuStore";
 import { useNotesStore } from "../../../state/notesStore";
 import type { Note } from "../../../types";
 
 const AUTOSAVE_DELAY_MS = 600;
+
+type ViewMode = "edit" | "preview" | "split";
 
 interface Props {
   /** Jump straight to this note - e.g. a result picked from global search.
@@ -13,10 +17,20 @@ interface Props {
   initialNoteId?: string;
 }
 
+function MarkdownPreview({ content }: { content: string }) {
+  // Recomputed on every render (i.e. every keystroke, via draft.content) -
+  // marked's parse is synchronous and fast enough at note-sized content
+  // that debouncing the preview itself would only add a visible lag with
+  // no real benefit (the network save is what's actually debounced).
+  const html = useMemo(() => DOMPurify.sanitize(marked.parse(content || "", { async: false })), [content]);
+  return <div className="notes-preview" dangerouslySetInnerHTML={{ __html: html }} />;
+}
+
 export function NotesApp({ initialNoteId }: Props) {
   const { notes, loaded, load, getNote, create, update, remove } = useNotesStore();
   const [activeId, setActiveId] = useState<string | null>(initialNoteId || null);
   const [draft, setDraft] = useState<Note | null>(null);
+  const [viewMode, setViewMode] = useState<ViewMode>("edit");
   const saveTimer = useRef<number | null>(null);
 
   useEffect(() => {
@@ -118,16 +132,44 @@ export function NotesApp({ initialNoteId }: Props) {
                 placeholder="Dossier (optionnel)"
                 onChange={(e) => scheduleSave({ ...draft, folder: e.target.value })}
               />
+              <div className="notes-view-toggle">
+                <button
+                  className={viewMode === "edit" ? "active" : ""}
+                  title="Édition"
+                  onClick={() => setViewMode("edit")}
+                >
+                  ✏️
+                </button>
+                <button
+                  className={viewMode === "split" ? "active" : ""}
+                  title="Édition + aperçu"
+                  onClick={() => setViewMode("split")}
+                >
+                  ⬍
+                </button>
+                <button
+                  className={viewMode === "preview" ? "active" : ""}
+                  title="Aperçu"
+                  onClick={() => setViewMode("preview")}
+                >
+                  👁
+                </button>
+              </div>
               <button className="notes-delete-btn" title="Supprimer" onClick={() => onDelete(draft.id)}>
                 🗑
               </button>
             </div>
-            <textarea
-              className="notes-content-input"
-              value={draft.content}
-              placeholder="Écrivez en Markdown..."
-              onChange={(e) => scheduleSave({ ...draft, content: e.target.value })}
-            />
+            <div className={`notes-body notes-body-${viewMode}`}>
+              {viewMode !== "preview" && (
+                <textarea
+                  className="notes-content-input"
+                  value={draft.content}
+                  placeholder="Écrivez en Markdown..."
+                  onChange={(e) => scheduleSave({ ...draft, content: e.target.value })}
+                />
+              )}
+              {viewMode !== "edit" && <MarkdownPreview content={draft.content} />}
+            </div>
           </>
         ) : (
           <div className="notes-empty-state">Sélectionnez une note ou créez-en une nouvelle.</div>

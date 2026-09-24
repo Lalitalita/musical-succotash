@@ -138,6 +138,16 @@ services:
       - backend-userfiles:/app/userfiles
       - backend-browser-state:/app/browser_state
       - backend-backups:/app/backups
+      # Powers the "Docker" app (backend/app/routers/docker_manager.py) and
+      # the "Terminal" app's `docker exec` access to other containers -
+      # gives this container root-equivalent control of the HOST, not just
+      # itself (start/stop/inspect any container, read/write anything the
+      # Docker daemon can). Deliberate, explicit trade-off made at the
+      # user's request so both apps work out of the box with a plain
+      # `docker compose up`, protected only by the same admin+LAN gate as
+      # every other sensitive endpoint in this app (see README's "Terminal
+      # et Docker" section) - there is no separate opt-in flag for it.
+      - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
       postgres:
         condition: service_healthy
@@ -209,20 +219,20 @@ services:
       start_period: 20s
 
   # A real interactive shell in the browser (the "Terminal" desktop app),
-  # via ttyd (see terminal/Dockerfile). Opt-in and profile-gated like
-  # everything else here (`docker compose --profile dockerctl up -d --build`)
-  # - and even then, this alone gives a shell with no Docker access: the
-  # Docker socket mount that lets it `docker exec` into other containers
-  # only comes from the SEPARATE docker-compose.dockerctl.yml overlay (see
-  # README - same opt-in convention as self-update's socket mount). Never
-  # exposed on the host or the public network - only reachable through the
-  # frontend's Nginx, which gates every request behind the same admin+LAN
-  # check as every other sensitive endpoint (see nginx.conf and
-  # backend/app/routers/terminal.py) before ever proxying to it.
+  # via ttyd (see terminal/Dockerfile), with `docker`/`docker exec` access
+  # to every other container on the host - the same root-equivalent
+  # trade-off as the docker.sock mount on "backend" above, made
+  # deliberately so both apps work with a plain `docker compose up` (see
+  # README's "Terminal et Docker" section). Never exposed on the host or
+  # the public network - only reachable through the backend's own
+  # reverse proxy (backend/app/routers/terminal.py), which gates every
+  # request behind the same admin+LAN check as every other sensitive
+  # endpoint before ever relaying a byte to it.
   terminal:
     build:
       context: ./terminal
-    profiles: ["dockerctl"]
     restart: unless-stopped
     networks:
       - internal
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock

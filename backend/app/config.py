@@ -101,6 +101,13 @@ class Settings(BaseSettings):
     smb_password: str = ""
     smb_domain: str = ""
 
+    # --- Terminal app (ttyd container - see docker-compose.yml's `terminal`
+    # service and app/routers/terminal.py). Overridable mainly for local
+    # dev/testing outside Docker, where there's no "terminal" hostname to
+    # resolve. ---
+    terminal_host: str = "terminal"
+    terminal_port: int = 7681
+
     # --- Self-update (opt-in, requires the docker.sock + host-dir mount from
     # docker-compose.selfupdate.yml - see README, this grants the backend
     # root-equivalent control of the host). ---

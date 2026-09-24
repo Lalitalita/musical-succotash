@@ -16,7 +16,9 @@ def list_downloads(user: User = Depends(get_current_user), db: Session = Depends
 
 
 @router.post("", response_model=DownloadOut, status_code=status.HTTP_201_CREATED)
-def create_download(payload: DownloadCreate, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+async def create_download(
+    payload: DownloadCreate, user: User = Depends(get_current_user), db: Session = Depends(get_db)
+):
     if not payload.url.lower().startswith(("http://", "https://")):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "L'adresse doit commencer par http:// ou https://")
 
@@ -24,6 +26,12 @@ def create_download(payload: DownloadCreate, user: User = Depends(get_current_us
     db.add(download)
     db.commit()
     db.refresh(download)
+    # manager.start() calls asyncio.create_task(), which needs to run on the
+    # actual event loop - a plain `def` route here would execute in
+    # Starlette's worker threadpool instead (no running loop in that
+    # thread), making create_task() raise immediately and this whole
+    # endpoint fail with a 500 for every single URL, downloads never
+    # actually starting.
     manager.start(download.id, user.id, payload.url)
     return download
 

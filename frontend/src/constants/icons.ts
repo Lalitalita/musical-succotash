@@ -22,7 +22,6 @@ export const DEFAULT_APP_ICONS: Record<AppMetaId, string> = {
   calendar: "📅",
   notes: "📝",
   downloads: "📥",
-  sessions: "🔑",
   terminal: "💻",
   dockerctl: "🐳",
 };
@@ -36,7 +35,6 @@ export const APP_LABELS: Record<AppMetaId, string> = {
   calendar: "Calendrier",
   notes: "Notes",
   downloads: "Téléchargements",
-  sessions: "Sessions",
   terminal: "Terminal",
   dockerctl: "Docker",
 };
