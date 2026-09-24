@@ -23,6 +23,8 @@ export interface WindowInstance {
   initialUrl?: string;
   /** Initial tab id for a freshly opened Paramètres window (e.g. "bureau" from the desktop context menu). */
   initialTab?: string;
+  /** Opens straight into full mode - used by desktop "app" shortcuts pinned to a site. */
+  initialMode?: BrowserTabMode;
 }
 
 export interface LoginAttempt {
@@ -34,6 +36,12 @@ export interface LoginAttempt {
   user_agent: string | null;
   country: string | null;
   city: string | null;
+}
+
+export interface MySecurity {
+  mfa_enabled: boolean;
+  account_created_at: string;
+  recent_attempts: LoginAttempt[];
 }
 
 export interface SecurityStats {
@@ -114,6 +122,10 @@ export interface DesktopItem {
   kind: "app" | "url";
   appId?: AppId;
   url?: string;
+  /** "Site web" shortcuts only: open straight into full mode (a real,
+   * JS-capable browser) instead of the default lightweight text mode -
+   * for single-site "app" shortcuts (e.g. Instagram) that need JS. */
+  fullMode?: boolean;
   /** Free-form position on the desktop grid, in pixels from the top-left -
    * absent until the user drags the icon at least once (falls back to the
    * normal grid flow). */

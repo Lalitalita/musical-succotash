@@ -31,6 +31,7 @@ from smbprotocol.exceptions import SMBException
 
 from app.config import get_settings
 from app.deps import get_current_user
+from app.local_storage import user_root
 from app.models import User
 
 router = APIRouter(prefix="/api/files", tags=["files"])
@@ -89,9 +90,7 @@ def _iso(ts: float) -> str:
 
 
 def _local_user_root(user: User) -> Path:
-    root = Path(settings.local_files_root) / user.id
-    root.mkdir(parents=True, exist_ok=True)
-    return root.resolve()
+    return user_root(user.id)
 
 
 def _local_resolve(user: User, raw_path: Optional[str]) -> Path:

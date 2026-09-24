@@ -1,9 +1,10 @@
 import { create } from "zustand";
-import type { AppId, WindowInstance } from "../types";
+import type { AppId, BrowserTabMode, WindowInstance } from "../types";
 
 interface OpenOptions {
   initialUrl?: string;
   initialTab?: string;
+  initialMode?: BrowserTabMode;
   /** Open a brand-new window even if one for this appId is already open (used for the Navigateur launcher, never for Mail/Calendrier shortcuts). */
   forceNew?: boolean;
 }
@@ -56,6 +57,7 @@ export const useWindowStore = create<WindowState>((set, get) => ({
       zIndex: z,
       initialUrl: opts?.initialUrl,
       initialTab: opts?.initialTab,
+      initialMode: opts?.initialMode,
     };
     set((s) => ({ windows: [...s.windows, win], topZ: z }));
     return win.id;

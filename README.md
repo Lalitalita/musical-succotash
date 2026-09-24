@@ -116,6 +116,14 @@ loguée contient : horodatage, statut, IP, User-Agent, et géolocalisation
 `backend/geoip/README.md` pour l'installation, non fournie pour raisons de
 licence).
 
+Ce tableau de bord complet (toutes les tentatives, tous les comptes) reste
+volontairement réservé aux admins - mais chaque utilisateur, admin ou non,
+a accès à ses **propres** informations de sécurité via `GET /api/security/me`
+(`backend/app/routers/security.py`) et l'onglet **Sécurité** des Paramètres :
+statut de la double authentification, date de création du compte, et
+historique de ses propres tentatives de connexion uniquement - jamais celles
+des autres comptes.
+
 ## Navigateur distant en mode texte
 
 Aucun flux vidéo/canvas : le composant "Navigateur" du bureau demande une
@@ -187,6 +195,27 @@ autre page.
   une petite API REST dédiée.
 - Chaque requête réseau de la page (documents, XHR, images...) passe par le
   même garde-fou anti-SSRF que le mode texte (`page.route` + `validate_url`).
+- Thème sombre : Chromium démarre avec `--force-dark-mode` et
+  `color_scheme: "dark"` (Playwright) - les sites qui gèrent
+  `prefers-color-scheme` s'affichent directement en sombre, les autres
+  reçoivent l'inversion heuristique de Chrome.
+- La taille de l'écran virtuel (Xvfb) et de la fenêtre Chromium est choisie
+  au moment de la connexion pour correspondre à la taille réelle de la
+  fenêtre de l'appli à cet instant (au lieu d'une résolution fixe qui
+  laissait des bandes vides sur les côtés) - `rfb.scaleViewport` reste un
+  filet de sécurité si la fenêtre est redimensionnée ensuite en cours de
+  session, plutôt qu'un vrai redimensionnement live du bureau distant.
+- Téléchargements : interceptés côté serveur (`page.on("download")`) et
+  enregistrés directement dans `Local > Downloads` de l'Explorateur de
+  fichiers de l'utilisateur (voir plus bas) - rien n'est jamais écrit sur
+  l'appareil client.
+- **Limite connue** : il n'est pas possible de masquer l'interface propre de
+  Chromium (onglets/barre d'adresse) dans le flux VNC tout en gardant la
+  page pilotable par Playwright - les modes `--app=`/`--kiosk` de Chromium
+  sont ignorés ou contournés dès que l'automatisation CDP est active
+  (vérifié empiriquement : capture d'écran du bureau X11 complet, deux
+  approches différentes, chrome toujours visible). Le flux VNC montre donc
+  la fenêtre Chromium complète, pas seulement le contenu de la page.
 - Ressources plafonnées : `FULL_BROWSER_MAX_SESSIONS` sessions (donc trios
   Chromium+Xvfb+x11vnc) simultanées au maximum, fermeture automatique après
   `FULL_BROWSER_IDLE_TIMEOUT_SECONDS` d'inactivité, `FULL_BROWSER_MAX_LIFETIME_SECONDS`
@@ -281,8 +310,13 @@ bloqué dans un état bizarre.
   cliquer une app affiche ses réglages - changer son icône depuis la
   banque d'icônes, plus une section dédiée pour Messagerie/Calendrier
   (URL) et pour l'Explorateur de fichiers (icône par type de fichier :
-  dossier, PDF, image, vidéo...)), Utilisateurs (admin uniquement),
-  Système (état de l'API, accès rapide au dashboard sécurité pour les
+  dossier, PDF, image, vidéo...)), **Sécurité** (accessible à tout le
+  monde : statut de la double authentification, date de création du
+  compte, historique de ses propres tentatives de connexion uniquement -
+  voir "Dashboard de sécurité" plus haut pour la différence avec le
+  tableau de bord complet, réservé aux admins), Utilisateurs (admin
+  uniquement), Système (état de l'API, accès rapide au dashboard sécurité
+  complet pour les
   admins) et **À propos** (pas d'app dédiée pour ça : description de
   l'appli + génération d'un rapport de diagnostic - infos sur l'appareil,
   état complet du bureau (fenêtres/onglets/paramètres) et description du
@@ -305,7 +339,11 @@ bloqué dans un état bizarre.
   Persistés avec le reste de l'état du bureau. Les icônes se déplacent à la
   souris (glisser-déposer, position mémorisée) et leur icône peut être
   remplacée par une image (clic droit → "Changer l'icône...", upload via
-  `POST /api/uploads`).
+  `POST /api/uploads`). Un raccourci "Site web" a une case "Ouvrir en mode
+  complet" - coché, il ouvre directement le site dans un onglet Navigateur
+  déjà en mode complet (JS activé), pratique pour épingler un site
+  particulier (Instagram, etc.) comme une app dédiée sans repasser par le
+  bouton mode texte/complet à chaque fois.
 - **Personnalisation du fond d'écran** : en plus des dégradés prédéfinis,
   Paramètres → Bureau propose une couleur unie (sélecteur natif) ou une
   image personnelle uploadée.
@@ -359,7 +397,11 @@ webdesktop au-delà de l'URL.
 Une app "Explorateur de fichiers" (`/api/files/*`) avec deux sources :
 
 - **Local** : espace personnel par utilisateur (`backend-userfiles` volume),
-  isolé - chaque compte ne voit que son propre espace.
+  isolé - chaque compte ne voit que son propre espace. Structuré comme un
+  vrai dossier personnel dès la première visite (`Downloads`, `Desktop`,
+  `Documents`, `Pictures`, créés automatiquement - `app/local_storage.py`,
+  partagé avec le mode complet). Tout téléchargement fait en mode complet
+  atterrit directement dans `Local > Downloads`.
 - **SMB** : un partage réseau unique, partagé entre tous les comptes (ex. un
   NAS à la maison), configuré via `SMB_HOST`/`SMB_SHARE`/`SMB_USERNAME`/
   `SMB_PASSWORD` dans `.env`. Non configuré = message explicite plutôt qu'une
@@ -392,11 +434,13 @@ côté UNC pour le partage SMB.
 │       ├── deps.py             # IP réelle, garde LAN, session courante
 │       ├── browser_ssrf.py     # Validation anti-SSRF (+ allowlist interne)
 │       ├── full_browser.py     # Sessions mode complet (Chromium+Xvfb+x11vnc par onglet)
+│       ├── local_storage.py    # Layout du dossier perso (Downloads/Desktop/...)
 │       ├── init_db.py          # Bootstrap admin + migrations légères
 │       └── routers/
 │           ├── auth.py, admin.py, admin_users.py
 │           ├── browser_proxy.py, full_browser.py
 │           ├── bookmarks.py, events.py, files.py
+│           ├── security.py     # Sécurité perso (GET /api/security/me) - pas app/security.py (crypto/JWT)
 │           ├── desktop.py      # état de session persistant
 │           └── uploads.py      # avatars / icônes de favoris
 └── frontend/

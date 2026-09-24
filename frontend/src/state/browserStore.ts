@@ -20,7 +20,7 @@ interface BrowserWindowState {
 
 interface BrowserStoreState {
   byWindow: Record<string, BrowserWindowState>;
-  ensureWindow: (windowId: string, initialUrl?: string) => void;
+  ensureWindow: (windowId: string, initialUrl?: string, initialMode?: BrowserTabMode) => void;
   addTab: (windowId: string, address?: string) => void;
   closeTab: (windowId: string, tabId: string) => void;
   setActiveTab: (windowId: string, tabId: string) => void;
@@ -36,14 +36,14 @@ function newTabId() {
   return `tab-${Date.now()}-${counter++}`;
 }
 
-function makeTab(address = ""): BrowserTab {
+function makeTab(address = "", mode: BrowserTabMode = "text"): BrowserTab {
   const url = address ? normalizeUrl(address) : "";
   return {
     id: newTabId(),
     title: address ? address : "Nouvel onglet",
     address,
-    src: url ? viewSrc(url) : null,
-    mode: "text",
+    src: mode === "text" && url ? viewSrc(url) : null,
+    mode,
     navSeq: 0,
   };
 }
@@ -51,9 +51,9 @@ function makeTab(address = ""): BrowserTab {
 export const useBrowserStore = create<BrowserStoreState>((set, get) => ({
   byWindow: {},
 
-  ensureWindow: (windowId, initialUrl) => {
+  ensureWindow: (windowId, initialUrl, initialMode) => {
     if (get().byWindow[windowId]) return;
-    const tab = makeTab(initialUrl);
+    const tab = makeTab(initialUrl, initialMode);
     set((s) => ({
       byWindow: { ...s.byWindow, [windowId]: { tabs: [tab], activeTabId: tab.id } },
     }));

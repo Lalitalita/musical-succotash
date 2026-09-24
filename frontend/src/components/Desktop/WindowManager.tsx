@@ -20,7 +20,9 @@ export function WindowManager() {
     <>
       {windows.map((win) => (
         <Window key={win.id} win={win} titlebarContent={titlebarContentFor(win.appId, win.id)}>
-          {win.appId === "browser" && <BrowserApp windowId={win.id} initialUrl={win.initialUrl} />}
+          {win.appId === "browser" && (
+            <BrowserApp windowId={win.id} initialUrl={win.initialUrl} initialMode={win.initialMode} />
+          )}
           {win.appId === "security-dashboard" && <SecurityDashboard />}
           {win.appId === "settings" && <SettingsApp initialTab={win.initialTab} />}
           {win.appId === "files" && <FileExplorerApp windowId={win.id} />}

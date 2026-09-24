@@ -8,10 +8,11 @@ import { useWindowStore } from "../../../state/windowStore";
 import { AboutPanel } from "./AboutPanel";
 import { AppsSettingsPanel } from "./AppsSettingsPanel";
 import { IconBankPanel } from "./IconBankPanel";
+import { SecurityPanel } from "./SecurityPanel";
 import { UpdatePanel } from "./UpdatePanel";
 import { UsersPanel } from "./UsersPanel";
 
-type Tab = "compte" | "bureau" | "applications" | "icones" | "utilisateurs" | "systeme" | "apropos";
+type Tab = "compte" | "bureau" | "applications" | "icones" | "securite" | "utilisateurs" | "systeme" | "apropos";
 
 const WALLPAPERS = [
   { id: "default", label: "Aurore", css: "linear-gradient(160deg, #0f2027, #203a43 55%, #2c5364)" },
@@ -107,6 +108,7 @@ export function SettingsApp({ initialTab }: Props) {
             ["bureau", "🎨", "Bureau"],
             ["applications", "🧩", "Applications"],
             ["icones", "🖼️", "Banque d'icônes"],
+            ["securite", "🛡️", "Sécurité"],
             ...(me?.is_admin ? ([["utilisateurs", "👥", "Utilisateurs"]] as [Tab, string, string][]) : []),
             ["systeme", "⚙️", "Système"],
             ["apropos", "ℹ️", "À propos"],
@@ -225,6 +227,8 @@ export function SettingsApp({ initialTab }: Props) {
         {tab === "applications" && <AppsSettingsPanel initialAppId={appDetail} />}
 
         {tab === "icones" && <IconBankPanel />}
+
+        {tab === "securite" && <SecurityPanel />}
 
         {tab === "utilisateurs" && me?.is_admin && <UsersPanel />}
 

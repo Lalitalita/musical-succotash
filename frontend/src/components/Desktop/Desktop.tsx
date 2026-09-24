@@ -62,7 +62,11 @@ export function Desktop() {
       openWindow(item.appId, APP_LABELS[item.appId] || item.label);
     } else if (item.kind === "url" && item.url) {
       const url = normalizeUrl(item.url);
-      openWindow("browser", item.label, { forceNew: true, initialUrl: url });
+      openWindow("browser", item.label, {
+        forceNew: true,
+        initialUrl: url,
+        initialMode: item.fullMode ? "full" : undefined,
+      });
     }
   }
 

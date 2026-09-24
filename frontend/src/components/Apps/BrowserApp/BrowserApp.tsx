@@ -2,15 +2,17 @@ import { FormEvent, useEffect, useRef, useState } from "react";
 import { openContextMenu } from "../../../state/contextMenuStore";
 import { useBookmarksStore } from "../../../state/bookmarksStore";
 import { useBrowserStore } from "../../../state/browserStore";
+import type { BrowserTabMode } from "../../../types";
 import { normalizeUrl } from "../../../utils/url";
 import { RemoteFrame } from "./RemoteFrame";
 
 interface Props {
   windowId: string;
   initialUrl?: string;
+  initialMode?: BrowserTabMode;
 }
 
-export function BrowserApp({ windowId, initialUrl }: Props) {
+export function BrowserApp({ windowId, initialUrl, initialMode }: Props) {
   const { byWindow, ensureWindow, navigate, reload, setMode } = useBrowserStore();
   const { bookmarks, loaded, load, add, remove } = useBookmarksStore();
   const [addressInput, setAddressInput] = useState("");
@@ -20,7 +22,7 @@ export function BrowserApp({ windowId, initialUrl }: Props) {
   const iframeRefs = useRef<Record<string, HTMLIFrameElement | null>>({});
 
   useEffect(() => {
-    ensureWindow(windowId, initialUrl);
+    ensureWindow(windowId, initialUrl, initialMode);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [windowId]);
 

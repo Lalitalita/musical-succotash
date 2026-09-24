@@ -33,13 +33,23 @@ import time
 from dataclasses import dataclass, field
 from typing import Optional
 
-from playwright.async_api import Browser, BrowserContext, Page, Playwright, async_playwright
+from playwright.async_api import Browser, BrowserContext, Download, Page, Playwright, async_playwright
 
 from app.browser_ssrf import UnsafeUrlError, validate_url
 from app.config import get_settings
+from app.local_storage import downloads_dir, unique_path
 
 logger = logging.getLogger("webdesktop.full_browser")
 settings = get_settings()
+
+_DEFAULT_WIDTH, _DEFAULT_HEIGHT = 1280, 800
+_MIN_SIZE, _MAX_SIZE = 320, 2560
+
+
+def _clamp_size(width: Optional[int], height: Optional[int]) -> tuple[int, int]:
+    w = width if width and _MIN_SIZE <= width <= _MAX_SIZE else _DEFAULT_WIDTH
+    h = height if height and _MIN_SIZE <= height <= _MAX_SIZE else _DEFAULT_HEIGHT
+    return w, h
 
 # Internal-only Xvfb display numbers / VNC ports for full-browser sessions.
 # Neither is ever exposed outside the container: x11vnc binds "-localhost"
@@ -171,7 +181,10 @@ class FullBrowserManager:
             with contextlib.suppress(ProcessLookupError):
                 proc.kill()
 
-    async def _create_session(self, tab_id: str, user_id: str) -> FullBrowserSession:
+    async def _create_session(
+        self, tab_id: str, user_id: str, width: Optional[int] = None, height: Optional[int] = None
+    ) -> FullBrowserSession:
+        w, h = _clamp_size(width, height)
         display_num = self._alloc_display()
         vnc_port = _VNC_PORT_BASE + (display_num - _DISPLAY_BASE)
         xvfb_proc: Optional[asyncio.subprocess.Process] = None
@@ -179,7 +192,7 @@ class FullBrowserManager:
         browser: Optional[Browser] = None
         try:
             xvfb_proc = await asyncio.create_subprocess_exec(
-                "Xvfb", f":{display_num}", "-screen", "0", "1280x800x24", "-ac", "-nolisten", "tcp",
+                "Xvfb", f":{display_num}", "-screen", "0", f"{w}x{h}x24", "-ac", "-nolisten", "tcp",
                 stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL,
             )
             await self._wait_for_socket(f"/tmp/.X11-unix/X{display_num}")
@@ -224,7 +237,7 @@ class FullBrowserManager:
                     "--disable-backgrounding-occluded-windows",
                     "--disable-renderer-backgrounding",
                     "--mute-audio",
-                    "--window-size=1280,800",
+                    f"--window-size={w},{h}",
                     "--window-position=0,0",
                     # Sites like Google's login flow reject Chromium's default
                     # automation fingerprint ("this browser may not be
@@ -232,17 +245,27 @@ class FullBrowserManager:
                     # script below make it look like an ordinary desktop
                     # Chrome instead.
                     "--disable-blink-features=AutomationControlled",
+                    # Dark mode: forces the "auto dark theme" heuristic for
+                    # sites with no dark theme of their own. Sites that DO
+                    # support prefers-color-scheme get it the correct way,
+                    # via color_scheme="dark" on the context below - most
+                    # major sites fall into that bucket, this flag just
+                    # covers the rest.
+                    "--force-dark-mode",
+                    "--enable-features=WebContentsForceDark",
                 ],
             )
 
             state_path = self._state_path(user_id)
             context_kwargs = {
-                "viewport": {"width": 1280, "height": 800},
+                "viewport": {"width": w, "height": h},
                 "user_agent": (
                     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
                     "(KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
                 ),
                 "locale": "fr-FR",
+                "color_scheme": "dark",
+                "accept_downloads": True,
             }
             if os.path.exists(state_path):
                 context_kwargs["storage_state"] = state_path
@@ -253,6 +276,7 @@ class FullBrowserManager:
                 "Object.defineProperty(navigator, 'webdriver', { get: () => undefined });"
             )
             page = await context.new_page()
+            page.on("download", lambda d: asyncio.create_task(self._save_download(user_id, d)))
         except Exception:
             self._used_displays.discard(display_num)
             if browser:
@@ -277,7 +301,9 @@ class FullBrowserManager:
         self._tab_owner[tab_id] = user_id
         return session
 
-    async def get_or_create(self, tab_id: str, user_id: str) -> FullBrowserSession:
+    async def get_or_create(
+        self, tab_id: str, user_id: str, width: Optional[int] = None, height: Optional[int] = None
+    ) -> FullBrowserSession:
         if not settings.full_browser_enabled:
             raise RuntimeError("Full-browser mode is not enabled on this server.")
 
@@ -292,7 +318,15 @@ class FullBrowserManager:
             if len(self._sessions) >= settings.full_browser_max_sessions:
                 raise SessionLimitError()
 
-            return await self._create_session(tab_id, user_id)
+            return await self._create_session(tab_id, user_id, width, height)
+
+    async def _save_download(self, user_id: str, download: Download) -> None:
+        try:
+            dest = unique_path(downloads_dir(user_id), download.suggested_filename)
+            await download.save_as(str(dest))
+            logger.info("Full-browser download saved for user %s: %s", user_id, dest.name)
+        except Exception:  # noqa: BLE001 - never let a failed download save crash the session
+            logger.exception("Failed to save full-browser download for user %s", user_id)
 
     def get(self, tab_id: str, user_id: str) -> Optional[FullBrowserSession]:
         session = self._sessions.get(tab_id)

@@ -34,14 +34,24 @@ export function RemoteFrame({ tabId, initialUrl, navSeq }: Props) {
     setErrorMessage(null);
     mountedNavSeq.current = navSeq;
 
+    // Xvfb/Chromium are sized once, at connect time, to match the window as
+    // it is right now - avoids the box being launched at a fixed 1280x800
+    // and then letterboxed/stretched to fit whatever the window actually
+    // is. A resize mid-session still falls back to CSS scaling below
+    // rather than resizing the remote desktop live (which would need
+    // Xvfb/x11vnc support this deployment doesn't have).
+    const rect = el.getBoundingClientRect();
+    const width = Math.max(320, Math.round(rect.width) || 1280);
+    const height = Math.max(240, Math.round(rect.height) || 800);
+
     const proto = window.location.protocol === "https:" ? "wss" : "ws";
     const wsUrl = `${proto}://${window.location.host}/api/browser/full/ws?tab_id=${encodeURIComponent(
       tabId
-    )}&url=${encodeURIComponent(initialUrl)}`;
+    )}&url=${encodeURIComponent(initialUrl)}&width=${width}&height=${height}`;
 
     const rfb = new RFB(el, wsUrl);
-    // Xvfb renders at a fixed 1280x800 - scale that to fit instead of
-    // asking the (xrandr-less) virtual display to actually resize.
+    // Safety net for any mismatch (a resize after connecting, or the
+    // container not having settled its layout yet at connect time).
     rfb.scaleViewport = true;
     rfb.resizeSession = false;
     // Favor responsiveness over pixel-perfect quality: a lower

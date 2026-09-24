@@ -14,6 +14,7 @@ export function NewShortcutForm({ onClose }: Props) {
   const [kind, setKind] = useState<"app" | "url">("url");
   const [label, setLabel] = useState("");
   const [url, setUrl] = useState("");
+  const [fullMode, setFullMode] = useState(false);
   const [appId, setAppId] = useState<AppId>("browser");
   const [icon, setIcon] = useState("🔗");
 
@@ -21,7 +22,7 @@ export function NewShortcutForm({ onClose }: Props) {
     e.preventDefault();
     if (kind === "url") {
       if (!url.trim()) return;
-      add({ kind: "url", label: label.trim() || url.trim(), url: url.trim(), icon });
+      add({ kind: "url", label: label.trim() || url.trim(), url: url.trim(), icon, fullMode });
     } else {
       add({ kind: "app", label: label.trim() || APP_LABELS[appId], appId, icon: DEFAULT_APP_ICONS[appId] });
     }
@@ -54,6 +55,11 @@ export function NewShortcutForm({ onClose }: Props) {
             />
             <label className="settings-label">Icône (emoji, optionnel)</label>
             <input className="settings-input" value={icon} onChange={(e) => setIcon(e.target.value)} maxLength={4} />
+
+            <label className="settings-checkbox-row">
+              <input type="checkbox" checked={fullMode} onChange={(e) => setFullMode(e.target.checked)} />
+              Ouvrir en mode complet (JavaScript activé - pour un site comme Instagram)
+            </label>
           </>
         ) : (
           <>

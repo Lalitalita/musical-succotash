@@ -51,6 +51,16 @@ class LoginAttemptOut(BaseModel):
         from_attributes = True
 
 
+class MySecurityOut(BaseModel):
+    """Scoped-down security info any user can see about their own account -
+    unlike the admin dashboard (SecurityStats etc.), never includes other
+    users' attempts, IPs or usernames."""
+
+    mfa_enabled: bool
+    account_created_at: datetime
+    recent_attempts: list[LoginAttemptOut]
+
+
 class SecurityStats(BaseModel):
     total_attempts: int
     success_count: int

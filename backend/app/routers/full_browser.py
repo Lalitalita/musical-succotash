@@ -47,7 +47,13 @@ def _user_from_ws_cookies(websocket: WebSocket) -> User | None:
 
 
 @router.websocket("/ws")
-async def full_browser_ws(websocket: WebSocket, tab_id: str, url: str | None = None):
+async def full_browser_ws(
+    websocket: WebSocket,
+    tab_id: str,
+    url: str | None = None,
+    width: int | None = None,
+    height: int | None = None,
+):
     user = _user_from_ws_cookies(websocket)
     if not user:
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
@@ -56,7 +62,7 @@ async def full_browser_ws(websocket: WebSocket, tab_id: str, url: str | None = N
     await websocket.accept()
 
     try:
-        session = await manager.get_or_create(tab_id, user.id)
+        session = await manager.get_or_create(tab_id, user.id, width, height)
     except SessionLimitError:
         await websocket.close(code=status.WS_1013_TRY_AGAIN_LATER)
         return
