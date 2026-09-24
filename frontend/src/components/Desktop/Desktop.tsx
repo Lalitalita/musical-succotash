@@ -37,6 +37,7 @@ const WALLPAPERS: Record<string, string> = {
 export function Desktop() {
   const [startOpen, setStartOpen] = useState(false);
   const [clockOpen, setClockOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
   const [addingShortcut, setAddingShortcut] = useState(false);
   const { openWindow } = useWindowStore();
   const wallpaper = useSettingsStore((s) => s.wallpaper);
@@ -55,6 +56,7 @@ export function Desktop() {
   function closeFlyouts() {
     setStartOpen(false);
     setClockOpen(false);
+    setSearchOpen(false);
   }
 
   function openItem(item: (typeof items)[number]) {
@@ -146,13 +148,22 @@ export function Desktop() {
         startOpen={startOpen}
         onToggleStart={() => {
           setClockOpen(false);
+          setSearchOpen(false);
           setStartOpen((v) => !v);
         }}
         clockOpen={clockOpen}
         onToggleClock={() => {
           setStartOpen(false);
+          setSearchOpen(false);
           setClockOpen((v) => !v);
         }}
+        searchOpen={searchOpen}
+        onOpenSearch={() => {
+          setStartOpen(false);
+          setClockOpen(false);
+          setSearchOpen(true);
+        }}
+        onCloseSearch={() => setSearchOpen(false)}
       />
 
       {addingShortcut && <NewShortcutForm onClose={() => setAddingShortcut(false)} />}

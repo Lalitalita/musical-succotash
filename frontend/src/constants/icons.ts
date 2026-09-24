@@ -20,6 +20,11 @@ export const DEFAULT_APP_ICONS: Record<AppMetaId, string> = {
   settings: "⚙️",
   mail: "📧",
   calendar: "📅",
+  notes: "📝",
+  downloads: "📥",
+  sessions: "🔑",
+  terminal: "💻",
+  dockerctl: "🐳",
 };
 
 export const APP_LABELS: Record<AppMetaId, string> = {
@@ -29,6 +34,11 @@ export const APP_LABELS: Record<AppMetaId, string> = {
   settings: "Paramètres",
   mail: "Messagerie",
   calendar: "Calendrier",
+  notes: "Notes",
+  downloads: "Téléchargements",
+  sessions: "Sessions",
+  terminal: "Terminal",
+  dockerctl: "Docker",
 };
 
 export type FileTypeCategory =

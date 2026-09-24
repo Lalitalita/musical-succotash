@@ -14,6 +14,8 @@ interface OpenOptions {
   maximized?: boolean;
   /** WebToApp-style shortcut - see WindowInstance.chromeless. */
   chromeless?: boolean;
+  /** Jump straight to a note (Notes window) - see WindowInstance.initialNoteId. */
+  initialNoteId?: string;
 }
 
 interface WindowState {
@@ -42,7 +44,12 @@ export const useWindowStore = create<WindowState>((set, get) => ({
         set((s) => ({
           windows: s.windows.map((w) =>
             w.id === existing.id
-              ? { ...w, minimized: false, initialTab: opts?.initialTab ?? w.initialTab }
+              ? {
+                  ...w,
+                  minimized: false,
+                  initialTab: opts?.initialTab ?? w.initialTab,
+                  initialNoteId: opts?.initialNoteId ?? w.initialNoteId,
+                }
               : w
           ),
         }));
@@ -66,6 +73,7 @@ export const useWindowStore = create<WindowState>((set, get) => ({
       initialTab: opts?.initialTab,
       initialMode: opts?.initialMode,
       chromeless: opts?.chromeless,
+      initialNoteId: opts?.initialNoteId,
     };
     set((s) => ({ windows: [...s.windows, win], topZ: z }));
     return win.id;

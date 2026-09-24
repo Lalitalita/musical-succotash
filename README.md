@@ -1,8 +1,12 @@
 # WebDesktop
 
 Bureau virtuel ("Web Desktop") auto-hébergé, conteneurisé, avec authentification
-forte et second facteur déguisé, dashboard de sécurité réservé au LAN, et un
-"navigateur distant" en mode texte (aucun flux vidéo/canvas).
+forte et second facteur déguisé, dashboard de sécurité réservé au LAN, un
+"navigateur distant" (mode texte et mode complet), un explorateur de fichiers,
+des notes, une recherche globale, des téléchargements côté serveur, une
+gestion des sessions actives, et deux apps opt-in à accès root (Terminal,
+Docker) pour qui veut aussi piloter le reste de sa machine depuis le même
+bureau.
 
 Déploiement 100 % automatisé derrière un reverse-proxy Nginx externe qui gère
 déjà le TLS.
@@ -440,11 +444,56 @@ Chaque chemin envoyé par le client est validé pour interdire toute sortie du
 répertoire autorisé (`../`, chemins absolus...), aussi bien côté local que
 côté UNC pour le partage SMB.
 
+## Notes
+
+Une app "Notes" toute simple (`/api/notes`) : titre, contenu Markdown (pas
+de rendu, juste un éditeur texte), regroupement par un champ "dossier" libre
+(pas une vraie arborescence - juste une étiquette pour trier la liste).
+Sauvegarde automatique ~600ms après la dernière frappe, pas de bouton
+"Enregistrer" à chercher.
+
+## Téléchargements côté serveur
+
+Une app "Téléchargements" (`/api/downloads`) : collez une URL, le **serveur**
+la télécharge lui-même (streaming, par blocs de 256 Ko) directement dans
+`Local > Downloads` de l'Explorateur de fichiers - utile pour envoyer un
+gros fichier chez vous sans le faire transiter par la connexion de
+l'appareil client. Passe par le même garde-fou anti-SSRF que le navigateur
+(`app/browser_ssrf.py`), re-vérifié après toute redirection. Barre de
+progression en direct (l'appli ne repolle que tant qu'un téléchargement est
+en cours), plafonné à 5 Go par fichier.
+
+## Sessions actives
+
+Une app "Sessions" (`/api/sessions`) liste les appareils actuellement
+connectés à votre compte (IP, navigateur, date de connexion, dernière
+activité) et permet d'en déconnecter un à distance - pratique si vous vous
+êtes laissé connecté quelque part. Techniquement : chaque connexion crée
+une ligne `UserSession` en base, dont l'id est embarqué dans le JWT (claim
+`sid`) et vérifié à **chaque** requête authentifiée (`app/deps.py`) - avant
+cette fonctionnalité, un cookie de session restait valide jusqu'à son
+expiration naturelle, sans aucun moyen de le révoquer à distance.
+
+## Recherche globale (Ctrl+K)
+
+La barre de recherche de la barre des tâches (ou `Ctrl+K`/`Cmd+K` depuis
+n'importe où) ouvre une liste de résultats couvrant les applications, les
+onglets de Paramètres, les favoris du navigateur et vos notes - taper
+"sécu" par exemple remonte aussi bien l'app Sécurité que l'onglet
+Paramètres → Sécurité. Clic ou `Entrée` sur un résultat l'ouvre directement
+(une note ouvre l'app Notes avec cette note déjà sélectionnée). Tout se
+fait côté client à partir de données déjà chargées (favoris, notes) ou
+statiques (liste des apps/onglets) - pas de nouvel endpoint de recherche
+côté serveur, donc pas encore d'indexation du contenu des fichiers.
+
 ## Arborescence
 
 ```
 .
 ├── docker-compose.yml
+├── docker-compose.selfupdate.yml   # overlay opt-in: mise à jour auto (accès root hôte)
+├── docker-compose.dockerctl.yml    # overlay opt-in: apps Terminal + Docker (accès root hôte)
+├── terminal/                       # image ttyd + docker-cli (app "Terminal")
 ├── .env.example
 ├── backend/
 │   ├── Dockerfile
@@ -454,40 +503,45 @@ côté UNC pour le partage SMB.
 │       ├── main.py             # FastAPI, montage des routers
 │       ├── config.py           # Settings (pydantic-settings, tout via env)
 │       ├── database.py         # SQLAlchemy engine/session
-│       ├── models.py           # User, LoginAttempt
+│       ├── models.py           # User, LoginAttempt, Note, Download, UserSession...
 │       ├── schemas.py          # Pydantic I/O
-│       ├── security.py         # Argon2id, JWT, leurre TOTP
+│       ├── security.py         # Argon2id, JWT (+ claim "sid"), leurre TOTP
 │       ├── rate_limit.py       # Compteurs Redis + verrouillage progressif
 │       ├── geoip.py            # Lookups GeoLite2
 │       ├── mailer.py           # Alertes SMTP
-│       ├── deps.py             # IP réelle, garde LAN, session courante
+│       ├── deps.py             # IP réelle, garde LAN, session courante (+ révocation)
 │       ├── browser_ssrf.py     # Validation anti-SSRF (+ allowlist interne)
 │       ├── full_browser.py     # Sessions mode complet (Chromium+Xvfb+x11vnc par onglet)
+│       ├── downloads.py        # Téléchargements serveur (streaming httpx)
 │       ├── local_storage.py    # Layout du dossier perso (Downloads/Desktop/...)
 │       ├── init_db.py          # Bootstrap admin + migrations légères
 │       └── routers/
 │           ├── auth.py, admin.py, admin_users.py
 │           ├── browser_proxy.py, full_browser.py
-│           ├── bookmarks.py, events.py, files.py
+│           ├── bookmarks.py, events.py, files.py, notes.py, downloads.py
+│           ├── sessions.py     # Sessions actives (liste/révocation)
+│           ├── terminal.py     # Gate admin+LAN pour l'app Terminal (proxy via Nginx)
+│           ├── docker_manager.py  # Contrôle Docker (app "Docker")
 │           ├── security.py     # Sécurité perso (GET /api/security/me) - pas app/security.py (crypto/JWT)
 │           ├── desktop.py      # état de session persistant
 │           └── uploads.py      # avatars / icônes de favoris
 └── frontend/
     ├── Dockerfile               # build Vite -> Nginx
-    ├── nginx.conf               # sert le SPA + proxy /api -> backend:8000 (+ WS)
+    ├── nginx.conf               # sert le SPA + proxy /api -> backend:8000 (+ WS, + auth_request terminal)
     └── src/
         ├── api/client.ts
         ├── state/
         │   ├── authStore.ts, windowStore.ts, browserStore.ts
         │   ├── settingsStore.ts, bookmarksStore.ts, contextMenuStore.ts
         │   ├── eventsStore.ts, adminUsersStore.ts, desktopItemsStore.ts
+        │   ├── notesStore.ts, downloadsStore.ts
         │   └── persistence.ts      # save/restore de l'état du bureau
         ├── components/
         │   ├── Login/{LoginForm,MfaDecoyForm}.tsx
         │   ├── Desktop/{Desktop,Taskbar,StartMenu,ClockFlyout,ContextMenu,
-        │   │            NewShortcutForm,Window,WindowManager}.tsx
+        │   │            SearchOverlay,NewShortcutForm,Window,WindowManager}.tsx
         │   └── Apps/{BrowserApp(+RemoteFrame),SecurityDashboard,Settings(+UsersPanel),
-        │             FileExplorer}/
+        │             FileExplorer,Notes,Downloads,Sessions,Terminal,Docker}/
         └── styles/global.css     # thème Windows 11 (acrylique/mica)
 ```
 
@@ -557,6 +611,39 @@ le rester tant que vous n'avez pas conscience de ce qu'il implique :
   dernière tentative est visible dans le même panneau.
 - Sauvegardes déposées dans le volume `backend-backups` (dump SQL Postgres
   + archive des fichiers utilisateurs), à chaque mise à jour.
+
+## Terminal et Docker (opt-in, donne un accès root à l'hôte)
+
+Deux apps réservées aux comptes admin, **désactivées par défaut**, qui
+donnent le même type d'accès que la mise à jour automatique ci-dessus - un
+contrôle root-équivalent de la machine hôte, pas seulement du conteneur.
+Ne les activez que si vous en avez besoin et en comprenez les implications :
+
+- **🐳 Docker** : liste des conteneurs (statut, image, ports), logs (300
+  dernières lignes), démarrer/arrêter/redémarrer, stats CPU/RAM en direct -
+  un mini Portainer suffisant pour surveiller/relancer ses propres services
+  sans quitter le webdesktop.
+- **💻 Terminal** : un vrai shell interactif dans le navigateur (via
+  [ttyd](https://github.com/tsl0922/ttyd)), avec `docker`/`docker exec`
+  disponibles pour atteindre n'importe quel autre conteneur de la machine.
+- Les deux passent par le même overlay Docker Compose que la mise à jour
+  automatique (mêmes principes, fichier séparé) :
+  ```bash
+  docker compose -f docker-compose.yml -f docker-compose.dockerctl.yml \
+    --profile dockerctl up -d --build
+  ```
+  Sans cet overlay, "Docker" affiche juste "indisponible" et "Terminal" est
+  un shell vide sans aucun accès Docker - rien ne fonctionne par défaut.
+- Gating : réservées aux comptes admin **et** au réseau local/VPN (même
+  garde-fou que le reste des endpoints sensibles de l'appli -
+  `backend/app/deps.py`). Le Terminal n'est jamais exposé directement : tout
+  passe par le Nginx du frontend, qui vérifie ces deux conditions via un
+  `auth_request` avant même de relayer le WebSocket vers le conteneur ttyd
+  (`frontend/nginx.conf`, `backend/app/routers/terminal.py`) - ttyd
+  lui-même n'écoute que sur le réseau Docker interne, jamais publié.
+- Côté API (`backend/app/routers/docker_manager.py`), "Docker" appelle
+  simplement le CLI `docker` déjà présent dans l'image du backend (utilisé
+  aussi par la mise à jour auto) - pas de dépendance Python supplémentaire.
 
 ## Notes de sécurité
 

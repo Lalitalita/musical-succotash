@@ -1,10 +1,15 @@
 import { useWindowStore } from "../../state/windowStore";
 import { BrowserApp } from "../Apps/BrowserApp/BrowserApp";
 import { BrowserTabBar } from "../Apps/BrowserApp/BrowserTabBar";
+import { DockerApp } from "../Apps/Docker/DockerApp";
+import { DownloadsApp } from "../Apps/Downloads/DownloadsApp";
 import { FileExplorerApp } from "../Apps/FileExplorer/FileExplorerApp";
 import { FileExplorerTabBar } from "../Apps/FileExplorer/FileExplorerTabBar";
+import { NotesApp } from "../Apps/Notes/NotesApp";
 import { SecurityDashboard } from "../Apps/SecurityDashboard/SecurityDashboard";
+import { SessionsApp } from "../Apps/Sessions/SessionsApp";
 import { SettingsApp } from "../Apps/Settings/SettingsApp";
+import { TerminalApp } from "../Apps/Terminal/TerminalApp";
 import { Window } from "./Window";
 
 function titlebarContentFor(appId: string, windowId: string, chromeless?: boolean) {
@@ -34,6 +39,11 @@ export function WindowManager() {
           {win.appId === "security-dashboard" && <SecurityDashboard />}
           {win.appId === "settings" && <SettingsApp initialTab={win.initialTab} />}
           {win.appId === "files" && <FileExplorerApp windowId={win.id} />}
+          {win.appId === "notes" && <NotesApp initialNoteId={win.initialNoteId} />}
+          {win.appId === "downloads" && <DownloadsApp />}
+          {win.appId === "sessions" && <SessionsApp />}
+          {win.appId === "terminal" && <TerminalApp />}
+          {win.appId === "dockerctl" && <DockerApp />}
         </Window>
       ))}
     </>

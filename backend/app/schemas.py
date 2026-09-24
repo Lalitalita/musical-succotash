@@ -120,6 +120,59 @@ class DesktopStateIn(BaseModel):
     state: dict
 
 
+class NoteCreate(BaseModel):
+    title: str = Field(default="Sans titre", max_length=200)
+    folder: str = Field(default="", max_length=200)
+    content: str = Field(default="", max_length=200_000)
+
+
+class NoteUpdate(BaseModel):
+    title: Optional[str] = Field(default=None, max_length=200)
+    folder: Optional[str] = Field(default=None, max_length=200)
+    content: Optional[str] = Field(default=None, max_length=200_000)
+
+
+class NoteListOut(BaseModel):
+    id: str
+    title: str
+    folder: str
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class NoteOut(NoteListOut):
+    content: str
+
+
+class DownloadCreate(BaseModel):
+    url: str = Field(min_length=1, max_length=2048)
+
+
+class DownloadOut(BaseModel):
+    id: str
+    url: str
+    filename: str
+    status: str
+    total_bytes: Optional[int]
+    downloaded_bytes: int
+    error: Optional[str]
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class SessionOut(BaseModel):
+    id: str
+    ip_address: str
+    user_agent: Optional[str]
+    created_at: datetime
+    last_seen_at: datetime
+    is_current: bool
+
+
 class EventCreate(BaseModel):
     title: str = Field(min_length=1, max_length=200)
     start_at: datetime

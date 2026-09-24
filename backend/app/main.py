@@ -15,10 +15,15 @@ from app.routers import (
     browser_proxy,
     desktop,
     diagnostics,
+    docker_manager,
+    downloads,
     events,
     files,
     full_browser,
+    notes,
     security,
+    sessions,
+    terminal,
     uploads,
 )
 
@@ -67,3 +72,8 @@ app.include_router(files.router)
 app.include_router(diagnostics.router)
 app.include_router(admin_update.router)
 app.include_router(security.router)
+app.include_router(notes.router)
+app.include_router(downloads.router)
+app.include_router(sessions.router)
+app.include_router(terminal.router)
+app.include_router(docker_manager.router)

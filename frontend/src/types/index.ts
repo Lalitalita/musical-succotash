@@ -6,7 +6,16 @@ export interface Me {
   avatar_url: string | null;
 }
 
-export type AppId = "browser" | "security-dashboard" | "settings" | "files";
+export type AppId =
+  | "browser"
+  | "security-dashboard"
+  | "settings"
+  | "files"
+  | "notes"
+  | "downloads"
+  | "sessions"
+  | "terminal"
+  | "dockerctl";
 
 export interface WindowInstance {
   id: string;
@@ -23,6 +32,8 @@ export interface WindowInstance {
   initialUrl?: string;
   /** Initial tab id for a freshly opened Paramètres window (e.g. "bureau" from the desktop context menu). */
   initialTab?: string;
+  /** Initial note id for a freshly opened Notes window (jumping straight to a result from global search). */
+  initialNoteId?: string;
   /** Opens straight into full mode - used by desktop "app" shortcuts pinned to a site. */
   initialMode?: BrowserTabMode;
   /** WebToApp-style shortcut: hides the browser's own toolbar/bookmarks
@@ -148,3 +159,43 @@ export interface FileEntry {
 }
 
 export type FileSource = "local" | "smb";
+
+export interface NoteListItem {
+  id: string;
+  title: string;
+  folder: string;
+  updated_at: string;
+}
+
+export interface Note extends NoteListItem {
+  content: string;
+}
+
+export interface Download {
+  id: string;
+  url: string;
+  filename: string;
+  status: "downloading" | "done" | "failed";
+  total_bytes: number | null;
+  downloaded_bytes: number;
+  error: string | null;
+  created_at: string;
+}
+
+export interface ActiveSession {
+  id: string;
+  ip_address: string;
+  user_agent: string | null;
+  created_at: string;
+  last_seen_at: string;
+  is_current: boolean;
+}
+
+export interface DockerContainer {
+  ID: string;
+  Names: string;
+  Image: string;
+  Status: string;
+  State: string;
+  Ports: string;
+}

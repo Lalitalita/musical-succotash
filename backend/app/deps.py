@@ -2,6 +2,7 @@
 and cookie-session authentication.
 """
 import ipaddress
+from datetime import datetime
 from typing import Optional
 
 from fastapi import Cookie, Depends, HTTPException, Request, status
@@ -9,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.database import get_db
-from app.models import User
+from app.models import User, UserSession
 from app.security import decode_token
 
 settings = get_settings()
@@ -81,9 +82,33 @@ def get_current_user(
     payload = decode_token(session)
     if not payload or payload.get("type") != "session":
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid or expired session")
+
+    # "sid" ties this JWT to a UserSession row (app/models.py) - checked on
+    # every request so a session can actually be terminated remotely
+    # (Paramètres > Sessions) instead of just deleting a cookie the token
+    # itself would otherwise remain valid without, until it naturally
+    # expires.
+    sid = payload.get("sid")
+    if not sid:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid session")
+    user_session = db.query(UserSession).filter(UserSession.id == sid).first()
+    if not user_session or user_session.revoked:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Session terminée")
+
     user = db.query(User).filter(User.username == payload["sub"]).first()
     if not user:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid session")
+
+    # Throttled: this runs on every authenticated request (including
+    # frequent polling), so writing on every single one would be a lot of
+    # otherwise-pointless UPDATEs for a value only ever shown rounded to
+    # "a moment ago" in the sessions list.
+    now = datetime.utcnow()
+    if (now - user_session.last_seen_at).total_seconds() > 60:
+        user_session.last_seen_at = now
+        db.add(user_session)
+        db.commit()
+
     return user
 
 

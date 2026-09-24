@@ -21,7 +21,7 @@ from pydantic import BaseModel
 from app.database import SessionLocal
 from app.deps import get_current_user
 from app.full_browser import NotOwnerError, SessionLimitError, manager
-from app.models import User
+from app.models import User, UserSession
 from app.security import decode_token
 
 router = APIRouter(prefix="/api/browser/full", tags=["browser-full"])
@@ -39,8 +39,18 @@ def _user_from_ws_cookies(websocket: WebSocket) -> User | None:
     payload = decode_token(token)
     if not payload or payload.get("type") != "session":
         return None
+    sid = payload.get("sid")
+    if not sid:
+        return None
     db = SessionLocal()
     try:
+        # Same server-side revocation check as get_current_user() (see
+        # app/deps.py) - a WebSocket doesn't go through that dependency, so
+        # without this a session revoked from Paramètres > Sessions could
+        # still keep driving an already-open full-mode browser tab.
+        user_session = db.query(UserSession).filter(UserSession.id == sid).first()
+        if not user_session or user_session.revoked:
+            return None
         return db.query(User).filter(User.username == payload["sub"]).first()
     finally:
         db.close()

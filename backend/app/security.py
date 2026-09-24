@@ -99,5 +99,12 @@ def create_mfa_pending_token(username: str) -> str:
     return create_token(username, "mfa_pending", settings.mfa_pending_ttl_minutes)
 
 
-def create_session_token(username: str, is_admin: bool) -> str:
-    return create_token(username, "session", settings.access_token_ttl_minutes, {"is_admin": is_admin})
+def create_session_token(username: str, is_admin: bool, session_id: str) -> str:
+    # session_id is a UserSession row's id (app/models.py) - carried as the
+    # "sid" claim so get_current_user() can check server-side, on every
+    # request, whether this particular session has since been revoked
+    # (Paramètres > Sessions) rather than trusting the JWT blindly until it
+    # naturally expires.
+    return create_token(
+        username, "session", settings.access_token_ttl_minutes, {"is_admin": is_admin, "sid": session_id}
+    )

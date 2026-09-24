@@ -1,6 +1,6 @@
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
 
 from app import rate_limit, security
@@ -9,7 +9,7 @@ from app.database import get_db
 from app.deps import get_client_ip, get_current_user
 from app.geoip import lookup as geoip_lookup
 from app.mailer import send_alert
-from app.models import AttemptStatus, LoginAttempt, SecurityAlert, User
+from app.models import AttemptStatus, LoginAttempt, SecurityAlert, User, UserSession
 from app.schemas import (
     LoginRequest,
     LoginResponse,
@@ -133,7 +133,12 @@ def verify_mfa(payload: MfaVerifyRequest, request: Request, response: Response, 
     rate_limit.reset_failures("user", username)
     _log_attempt(db, username=username, status_=AttemptStatus.MFA_SUCCESS, ip=ip, user_agent=ua)
 
-    session_token = security.create_session_token(user.username, user.is_admin)
+    user_session = UserSession(user_id=user.id, ip_address=ip, user_agent=ua[:512] if ua else None)
+    db.add(user_session)
+    db.commit()
+    db.refresh(user_session)
+
+    session_token = security.create_session_token(user.username, user.is_admin, user_session.id)
     response.set_cookie(
         "session",
         session_token,
@@ -147,7 +152,16 @@ def verify_mfa(payload: MfaVerifyRequest, request: Request, response: Response, 
 
 
 @router.post("/logout")
-def logout(response: Response):
+def logout(response: Response, session: str | None = Cookie(default=None), db: Session = Depends(get_db)):
+    if session:
+        payload = security.decode_token(session)
+        sid = payload.get("sid") if payload else None
+        if sid:
+            user_session = db.query(UserSession).filter(UserSession.id == sid).first()
+            if user_session:
+                user_session.revoked = True
+                db.add(user_session)
+                db.commit()
     response.delete_cookie("session", path="/")
     return {"ok": True}
 

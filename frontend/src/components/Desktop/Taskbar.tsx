@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { APP_LABELS } from "../../constants/icons";
 import { AppIconGlyph } from "../IconPicker/AppIconGlyph";
 import { useAppIcon } from "../../state/appIconsStore";
@@ -8,12 +8,16 @@ import { usePinnedAppsStore } from "../../state/pinnedAppsStore";
 import { useWindowStore } from "../../state/windowStore";
 import type { AppId, WindowInstance } from "../../types";
 import { ClockFlyout } from "./ClockFlyout";
+import { SearchOverlay, type SearchOverlayHandle } from "./SearchOverlay";
 
 interface Props {
   onToggleStart: () => void;
   startOpen: boolean;
   onToggleClock: () => void;
   clockOpen: boolean;
+  searchOpen: boolean;
+  onOpenSearch: () => void;
+  onCloseSearch: () => void;
 }
 
 function pinMenuItem(appId: AppId, pinned: boolean) {
@@ -74,10 +78,21 @@ function PinnedTaskbarButton({ appId }: { appId: AppId }) {
   );
 }
 
-export function Taskbar({ onToggleStart, startOpen, onToggleClock, clockOpen }: Props) {
+export function Taskbar({
+  onToggleStart,
+  startOpen,
+  onToggleClock,
+  clockOpen,
+  searchOpen,
+  onOpenSearch,
+  onCloseSearch,
+}: Props) {
   const { windows, focusWindow, toggleMinimize } = useWindowStore();
   const pinnedApps = usePinnedAppsStore((s) => s.pinned);
   const [now, setNow] = useState(new Date());
+  const [searchQuery, setSearchQuery] = useState("");
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const searchOverlayRef = useRef<SearchOverlayHandle>(null);
 
   useEffect(() => {
     // Ticks every second so the clock flyout can show a live HH:MM:SS
@@ -85,6 +100,18 @@ export function Taskbar({ onToggleStart, startOpen, onToggleClock, clockOpen }: 
     const t = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(t);
   }, []);
+
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        onOpenSearch();
+        searchInputRef.current?.focus();
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onOpenSearch]);
 
   function onTaskClick(id: string, minimized: boolean) {
     if (minimized) toggleMinimize(id);
@@ -111,7 +138,39 @@ export function Taskbar({ onToggleStart, startOpen, onToggleClock, clockOpen }: 
       >
         ⊞
       </button>
-      <input className="taskbar-search" placeholder="Rechercher" />
+      <div className="taskbar-search-wrap">
+        <input
+          ref={searchInputRef}
+          className="taskbar-search"
+          placeholder="Rechercher (Ctrl+K)"
+          value={searchQuery}
+          onFocus={onOpenSearch}
+          onChange={(e) => {
+            setSearchQuery(e.target.value);
+            onOpenSearch();
+          }}
+          onClick={(e) => e.stopPropagation()}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") {
+              onCloseSearch();
+              setSearchQuery("");
+              searchInputRef.current?.blur();
+            }
+            if (e.key === "Enter") searchOverlayRef.current?.runFirst();
+          }}
+        />
+        {searchOpen && (
+          <SearchOverlay
+            ref={searchOverlayRef}
+            query={searchQuery}
+            onQueryChange={setSearchQuery}
+            onClose={() => {
+              onCloseSearch();
+              setSearchQuery("");
+            }}
+          />
+        )}
+      </div>
       {pinnedApps
         .filter((id) => !openAppIds.has(id))
         .map((id) => (
