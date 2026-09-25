@@ -2892,3 +2892,134 @@ img.file-icon {
   background: none;
 }
 
+/* ---------------- Galerie (image viewer/light editor) ---------------- */
+
+.gallery-app {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: #000;
+}
+
+.gallery-toolbar,
+.hadobe-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.gallery-toolbar button,
+.hadobe-toolbar button {
+  background: var(--surface-light);
+  border: none;
+  color: var(--text);
+  border-radius: 6px;
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.gallery-toolbar button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.gallery-filename,
+.hadobe-filename {
+  font-size: 12px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 240px;
+}
+
+.gallery-toolbar-spacer {
+  flex: 1;
+}
+
+.gallery-download {
+  background: var(--surface-light);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 13px;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.gallery-save {
+  background: var(--accent) !important;
+  color: #fff !important;
+  font-weight: 500;
+}
+
+.gallery-adjust-row {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 8px 16px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.gallery-adjust-row label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.gallery-save-message {
+  font-size: 12px;
+  color: var(--accent);
+  margin-left: auto;
+}
+
+.gallery-viewport {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: auto;
+  min-height: 0;
+}
+
+.gallery-viewport img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.gallery-empty {
+  color: var(--text-dim);
+  font-size: 13px;
+  padding: 40px;
+  text-align: center;
+}
+
+/* ---------------- Hadobe (PDF viewer) ---------------- */
+
+.hadobe-app {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.hadobe-viewport {
+  flex: 1;
+  min-height: 0;
+  background: #525659;
+}
+
+.hadobe-viewport iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+}
+

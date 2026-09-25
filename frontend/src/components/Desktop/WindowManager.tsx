@@ -6,6 +6,8 @@ import { DockerApp } from "../Apps/Docker/DockerApp";
 import { DownloadsApp } from "../Apps/Downloads/DownloadsApp";
 import { FileExplorerApp } from "../Apps/FileExplorer/FileExplorerApp";
 import { FileExplorerTabBar } from "../Apps/FileExplorer/FileExplorerTabBar";
+import { GalleryApp } from "../Apps/Gallery/GalleryApp";
+import { HadobeApp } from "../Apps/Hadobe/HadobeApp";
 import { NotesApp } from "../Apps/Notes/NotesApp";
 import { SecurityDashboard } from "../Apps/SecurityDashboard/SecurityDashboard";
 import { SettingsApp } from "../Apps/Settings/SettingsApp";
@@ -70,6 +72,8 @@ export function WindowManager() {
           {win.appId === "downloads" && <DownloadsApp />}
           {win.appId === "terminal" && <TerminalApp />}
           {win.appId === "dockerctl" && <DockerApp />}
+          {win.appId === "gallery" && <GalleryApp initialFile={win.initialFile} />}
+          {win.appId === "pdfviewer" && <HadobeApp initialFile={win.initialFile} />}
         </Window>
       ))}
     </>

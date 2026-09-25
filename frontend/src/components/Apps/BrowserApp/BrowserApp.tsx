@@ -17,8 +17,21 @@ interface Props {
 }
 
 export function BrowserApp({ windowId, initialUrl, initialMode, chromeless }: Props) {
-  const { byWindow, ensureWindow, navigate, reload, setMode, updateTabMeta } = useBrowserStore();
-  const { bookmarks, loaded, load, add, remove } = useBookmarksStore();
+  // Selector-scoped (not a whole-store destructure): this window's own
+  // `byWindow` slice is the only thing that needs to re-render this
+  // component - the actions below are stable Zustand references and don't
+  // need to be subscribed to at all. Without this, EVERY browser window/tab
+  // in the whole desktop re-rendered on every single one of the others'
+  // periodic full-mode /meta polls (see below) - each poll ticks every
+  // 1.5s per open full-mode tab, so with more than one browser window open
+  // this was a constant, compounding source of unnecessary re-renders
+  // fighting the VNC canvas for the main thread, felt as exactly the kind
+  // of "something briefly redraws/stutters" jank reported.
+  const byWindow = useBrowserStore((s) => s.byWindow);
+  const { ensureWindow, navigate, reload, setMode, updateTabMeta } = useBrowserStore.getState();
+  const bookmarks = useBookmarksStore((s) => s.bookmarks);
+  const loaded = useBookmarksStore((s) => s.loaded);
+  const { load, add, remove } = useBookmarksStore.getState();
   const [addressInput, setAddressInput] = useState("");
   const [addingBookmark, setAddingBookmark] = useState(false);
   const [newBookmarkTitle, setNewBookmarkTitle] = useState("");
@@ -57,7 +70,15 @@ export function BrowserApp({ windowId, initialUrl, initialMode, chromeless }: Pr
         .get<{ url: string; title: string }>(`/browser/full/${tabId}/meta`)
         .then((meta) => {
           if (cancelled) return;
-          updateTabMeta(windowId, tabId, { address: meta.url, title: meta.title || meta.url });
+          const title = meta.title || meta.url;
+          // Most polls land on an unchanged page - skip the store write
+          // entirely rather than replacing the tab with an referentially-new
+          // (but value-identical) object every 1.5s, which otherwise forced
+          // a re-render of every subscriber for no actual change.
+          const current = useBrowserStore.getState().byWindow[windowId]?.tabs.find((t) => t.id === tabId);
+          if (!current || current.address !== meta.url || current.title !== title) {
+            updateTabMeta(windowId, tabId, { address: meta.url, title });
+          }
           if (document.activeElement !== addressInputRef.current) setAddressInput(meta.url);
         })
         .catch(() => {});
@@ -160,6 +181,7 @@ export function BrowserApp({ windowId, initialUrl, initialMode, chromeless }: Pr
           placeholder="Entrer une adresse (ex: exemple.com)"
           value={addressInput}
           onChange={(e) => setAddressInput(e.target.value)}
+          autoComplete="off"
         />
         <button type="submit">Aller</button>
         <button

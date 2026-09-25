@@ -12,6 +12,7 @@ import { useFileExplorerStore, type ExplorerTab } from "../../../state/fileExplo
 import { useFileListing } from "../../../state/useFileListing";
 import { useFileTypeIcon } from "../../../state/fileTypeIconsStore";
 import { saveDesktopState } from "../../../state/persistence";
+import { useWindowStore } from "../../../state/windowStore";
 import type { FileEntry, FileSource } from "../../../types";
 
 interface Props {
@@ -145,12 +146,27 @@ function FileExplorerTabPanel({
     navigateTab(windowId, tab.id, source, next);
   }
 
+  function openViewerFor(entry: FileEntry): "gallery" | "pdfviewer" | null {
+    const category = getFileCategory(entry.name, false);
+    if (category === "image") return "gallery";
+    if (category === "pdf") return "pdfviewer";
+    return null;
+  }
+
+  function openInViewer(entry: FileEntry, appId: "gallery" | "pdfviewer") {
+    useWindowStore.getState().openWindow(appId, appId === "gallery" ? "Galerie" : "Hadobe", {
+      initialFile: { source, path, name: entry.name },
+    });
+  }
+
   function openEntry(entry: FileEntry) {
     if (entry.is_dir) {
       goTo(joinPath(path, entry.name));
-    } else {
-      downloadEntry(entry);
+      return;
     }
+    const viewer = openViewerFor(entry);
+    if (viewer) openInViewer(entry, viewer);
+    else downloadEntry(entry);
   }
 
   function downloadEntry(entry: FileEntry) {
@@ -170,11 +186,32 @@ function FileExplorerTabPanel({
       });
   }
 
+  function renameEntry(entry: FileEntry) {
+    const newName = window.prompt("Renommer en :", entry.name);
+    if (!newName || !newName.trim() || newName.trim() === entry.name) return;
+    const full = joinPath(path, entry.name);
+    api
+      .post(`${base}/rename?path=${encodeURIComponent(full)}`, { new_name: newName.trim() })
+      .then(() => reload())
+      .catch(() => {
+        /* the row keeps its old name so the user can retry from the same menu */
+      });
+  }
+
   function buildRowMenu(entry: FileEntry): ContextMenuItem[] {
     const items: ContextMenuItem[] = [];
     if (!entry.is_dir) {
+      const viewer = openViewerFor(entry);
+      if (viewer) {
+        items.push({
+          label: viewer === "gallery" ? "Ouvrir dans Galerie" : "Ouvrir dans Hadobe",
+          icon: "↗",
+          onSelect: () => openInViewer(entry, viewer),
+        });
+      }
       items.push({ label: "Télécharger", icon: "⬇", onSelect: () => downloadEntry(entry) });
     }
+    items.push({ label: "Renommer", icon: "✏️", onSelect: () => renameEntry(entry) });
 
     const categories = useFileExplorerCategoriesStore.getState().categories;
     const full = joinPath(path, entry.name);

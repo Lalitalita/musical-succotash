@@ -14,7 +14,9 @@ export type AppId =
   | "notes"
   | "downloads"
   | "terminal"
-  | "dockerctl";
+  | "dockerctl"
+  | "gallery"
+  | "pdfviewer";
 
 export interface WindowInstance {
   id: string;
@@ -39,6 +41,9 @@ export interface WindowInstance {
    * bar/tab strip so the window shows just the site, like a real app -
    * only meaningful in text mode (see DesktopItem.chromeless). */
   chromeless?: boolean;
+  /** The file a freshly opened Galerie/Hadobe window should show first -
+   * set when opened from the File Explorer (double-click / "Ouvrir"). */
+  initialFile?: { source: FileSource; path: string; name: string };
 }
 
 export interface LoginAttempt {

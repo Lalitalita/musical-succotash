@@ -15,6 +15,7 @@ philosophy applied to outbound URLs.
 """
 import errno
 import logging
+import mimetypes
 import os
 import shutil
 from datetime import datetime, timezone
@@ -75,9 +76,10 @@ def _safe_filename(name: Optional[str]) -> str:
     return base
 
 
-def _content_disposition(filename: str) -> str:
+def _content_disposition(filename: str, inline: bool = False) -> str:
     ascii_fallback = filename.encode("ascii", "ignore").decode("ascii") or "fichier"
-    return f"attachment; filename=\"{ascii_fallback}\"; filename*=UTF-8''{quote(filename)}"
+    kind = "inline" if inline else "attachment"
+    return f"{kind}; filename=\"{ascii_fallback}\"; filename*=UTF-8''{quote(filename)}"
 
 
 def _iso(ts: float) -> str:
@@ -156,14 +158,18 @@ def upload_local(
 
 
 @router.get("/local/download")
-def download_local(path: str = Query(...), user: User = Depends(get_current_user)):
+def download_local(
+    path: str = Query(...),
+    inline: bool = Query(False, description="Content-Disposition: inline instead of attachment, for apps like Galerie/Hadobe that render the file in place rather than saving it."),
+    user: User = Depends(get_current_user),
+):
     target = _local_resolve(user, path)
     if not target.exists() or not target.is_file():
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Fichier introuvable.")
     return FileResponse(
         target,
         filename=target.name,
-        headers={"Content-Disposition": _content_disposition(target.name)},
+        headers={"Content-Disposition": _content_disposition(target.name, inline)},
     )
 
 
@@ -196,6 +202,31 @@ def mkdir_local(path: str = Query(...), user: User = Depends(get_current_user)):
         logger.warning("Local mkdir failed: %s", exc)
         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Échec de la création du dossier.")
     return {"name": target.name}
+
+
+class RenamePayload(BaseModel):
+    new_name: str
+
+
+@router.post("/local/rename")
+def rename_local(path: str = Query(...), payload: RenamePayload = ..., user: User = Depends(get_current_user)):
+    target = _local_resolve(user, path)
+    if target == _local_user_root(user):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Impossible de renommer le dossier racine.")
+    if not target.exists():
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Élément introuvable.")
+    new_name = _safe_filename(payload.new_name)
+    if not new_name:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Nom invalide.")
+    dest = target.parent / new_name
+    if dest.exists():
+        raise HTTPException(status.HTTP_409_CONFLICT, "Un élément avec ce nom existe déjà.")
+    try:
+        target.rename(dest)
+    except OSError as exc:
+        logger.warning("Local rename failed: %s", exc)
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Échec du renommage.")
+    return {"name": dest.name}
 
 
 # --------------------------------------------------------------------------
@@ -311,7 +342,11 @@ def upload_smb(
 
 
 @router.get("/smb/download")
-def download_smb(path: str = Query(...), user: User = Depends(get_current_user)):
+def download_smb(
+    path: str = Query(...),
+    inline: bool = Query(False, description="Content-Disposition: inline instead of attachment."),
+    user: User = Depends(get_current_user),
+):
     _ensure_smb_session()
     target = _smb_resolve(path)
     name = target.rsplit("\\", 1)[-1] or "fichier"
@@ -333,10 +368,16 @@ def download_smb(path: str = Query(...), user: User = Depends(get_current_user))
     except (SMBException, OSError) as exc:
         raise _smb_error_to_http(exc)
 
+    # A real media_type (instead of always application/octet-stream) mostly
+    # only matters for `inline` viewing - Galerie/Hadobe both open this URL
+    # in an <img>/<iframe>, and while browsers sniff image bytes regardless
+    # of a wrong Content-Type, they do NOT for a navigated/embedded PDF: an
+    # iframe needs application/pdf to render it instead of downloading it.
+    media_type = mimetypes.guess_type(name)[0] or "application/octet-stream"
     return StreamingResponse(
         stream(),
-        media_type="application/octet-stream",
-        headers={"Content-Disposition": _content_disposition(name)},
+        media_type=media_type,
+        headers={"Content-Disposition": _content_disposition(name, inline)},
     )
 
 
@@ -375,3 +416,26 @@ def mkdir_smb(path: str = Query(...), user: User = Depends(get_current_user)):
     except (SMBException, OSError) as exc:
         raise _smb_error_to_http(exc)
     return {"name": target.rsplit("\\", 1)[-1]}
+
+
+@router.post("/smb/rename")
+def rename_smb(path: str = Query(...), payload: RenamePayload = ..., user: User = Depends(get_current_user)):
+    _ensure_smb_session()
+    target = _smb_resolve(path)
+    if target == _smb_root():
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Impossible de renommer la racine du partage.")
+    new_name = _safe_filename(payload.new_name)
+    if not new_name:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Nom invalide.")
+    dest = target.rsplit("\\", 1)[0] + "\\" + new_name
+    try:
+        if not smbclient_path.exists(target):
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Élément introuvable sur le partage SMB.")
+        if smbclient_path.exists(dest):
+            raise HTTPException(status.HTTP_409_CONFLICT, "Un élément avec ce nom existe déjà.")
+        smbclient.rename(target, dest)
+    except HTTPException:
+        raise
+    except (SMBException, OSError) as exc:
+        raise _smb_error_to_http(exc)
+    return {"name": new_name}

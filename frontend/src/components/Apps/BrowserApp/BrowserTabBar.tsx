@@ -9,7 +9,11 @@ interface Props {
  * so the drag/minimize/close row and the tabs share a single band instead
  * of stacking two header bars. */
 export function BrowserTabBar({ windowId }: Props) {
-  const { byWindow, addTab, closeTab, setActiveTab, reload } = useBrowserStore();
+  // Selector-scoped, not a whole-store destructure - see BrowserApp.tsx for
+  // why (this titlebar strip otherwise re-rendered on every open browser
+  // window/tab's periodic full-mode /meta poll, not just this one's).
+  const byWindow = useBrowserStore((s) => s.byWindow);
+  const { addTab, closeTab, setActiveTab, reload } = useBrowserStore.getState();
   const win = byWindow[windowId];
   if (!win) return null;
 

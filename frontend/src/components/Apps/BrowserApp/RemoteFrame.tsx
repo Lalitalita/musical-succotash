@@ -34,15 +34,25 @@ export interface RemoteFrameHandle {
 // treating it as failed and offering a retry.
 const CONNECT_TIMEOUT_MS = 20000;
 
+// A brief WS hiccup (a VPN/LAN blip, a proxy renegotiating) doesn't need a
+// human to click "Réessayer" - that just turned a sub-second interruption
+// into "stuck until I notice and click something". A handful of quick,
+// automatic retries covers that; a connection that still won't hold after
+// this many attempts is a real problem, and THEN it falls back to the
+// manual retry button rather than silently retrying forever.
+const MAX_AUTO_RECONNECT_ATTEMPTS = 5;
+const AUTO_RECONNECT_DELAY_MS = 1000;
+
 export const RemoteFrame = forwardRef<RemoteFrameHandle, Props>(function RemoteFrame(
   { tabId, initialUrl },
   ref
 ) {
   const containerRef = useRef<HTMLDivElement>(null);
   const rfbRef = useRef<RFB | null>(null);
-  const [status, setStatus] = useState<"connecting" | "open" | "closed">("connecting");
+  const [status, setStatus] = useState<"connecting" | "reconnecting" | "open" | "closed">("connecting");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [retryToken, setRetryToken] = useState(0);
+  const autoReconnectAttemptsRef = useRef(0);
 
   useImperativeHandle(ref, () => ({
     paste() {
@@ -99,14 +109,34 @@ export const RemoteFrame = forwardRef<RemoteFrameHandle, Props>(function RemoteF
       rfb.disconnect();
     }, CONNECT_TIMEOUT_MS);
 
+    let reconnectTimeout: number | undefined;
+
     rfb.addEventListener("connect", () => {
       window.clearTimeout(connectTimeout);
+      autoReconnectAttemptsRef.current = 0;
       setStatus("open");
     });
     rfb.addEventListener("disconnect", ((e: CustomEvent<{ clean: boolean }>) => {
       window.clearTimeout(connectTimeout);
+      const clean = !!e.detail?.clean;
+      // Retry regardless of noVNC's own "clean" flag: a server-initiated
+      // close (a proxy detecting the upstream died, a worker reload) still
+      // arrives as a technically-clean WS close handshake, not just an
+      // abrupt drop - gating the retry on `clean` missed exactly that case
+      // (confirmed: killing the backend mid-session reports clean=true).
+      // What actually distinguishes "the user is done with this" from "we
+      // got interrupted" is whether this component is still mounted at all
+      // - if the user closed the tab/window, the effect's own cleanup
+      // below cancels this timeout before it would ever fire.
+      if (autoReconnectAttemptsRef.current < MAX_AUTO_RECONNECT_ATTEMPTS) {
+        autoReconnectAttemptsRef.current += 1;
+        setStatus("reconnecting");
+        setErrorMessage(null);
+        reconnectTimeout = window.setTimeout(() => setRetryToken((n) => n + 1), AUTO_RECONNECT_DELAY_MS);
+        return;
+      }
       setStatus("closed");
-      if (!e.detail?.clean) setErrorMessage("Connexion perdue.");
+      setErrorMessage(clean ? null : "Connexion perdue.");
     }) as EventListener);
     rfb.addEventListener("credentialsrequired", () => setErrorMessage("Authentification refusée."));
     rfb.addEventListener("securityfailure", () => setErrorMessage("Échec de connexion au flux distant."));
@@ -116,6 +146,7 @@ export const RemoteFrame = forwardRef<RemoteFrameHandle, Props>(function RemoteF
 
     return () => {
       window.clearTimeout(connectTimeout);
+      window.clearTimeout(reconnectTimeout);
       rfb.disconnect();
       rfbRef.current = null;
     };
@@ -127,10 +158,20 @@ export const RemoteFrame = forwardRef<RemoteFrameHandle, Props>(function RemoteF
       {status === "connecting" && !errorMessage && (
         <div className="remote-frame-status">Connexion au navigateur distant...</div>
       )}
+      {status === "reconnecting" && (
+        <div className="remote-frame-status reconnecting">Reconnexion...</div>
+      )}
       {(status === "closed" || errorMessage) && (
         <div className="remote-frame-status error">
           <p>{errorMessage || "Connexion fermée."}</p>
-          <button type="button" className="remote-frame-retry" onClick={() => setRetryToken((n) => n + 1)}>
+          <button
+            type="button"
+            className="remote-frame-retry"
+            onClick={() => {
+              autoReconnectAttemptsRef.current = 0;
+              setRetryToken((n) => n + 1);
+            }}
+          >
             Réessayer
           </button>
         </div>

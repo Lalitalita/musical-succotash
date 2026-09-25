@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { AppId, BrowserTabMode, WindowInstance } from "../types";
+import type { AppId, BrowserTabMode, FileSource, WindowInstance } from "../types";
 
 interface OpenOptions {
   initialUrl?: string;
@@ -16,6 +16,8 @@ interface OpenOptions {
   chromeless?: boolean;
   /** Jump straight to a note (Notes window) - see WindowInstance.initialNoteId. */
   initialNoteId?: string;
+  /** Jump straight to a file (Galerie/Hadobe windows) - see WindowInstance.initialFile. */
+  initialFile?: { source: FileSource; path: string; name: string };
 }
 
 interface WindowState {
@@ -49,6 +51,7 @@ export const useWindowStore = create<WindowState>((set, get) => ({
                   minimized: false,
                   initialTab: opts?.initialTab ?? w.initialTab,
                   initialNoteId: opts?.initialNoteId ?? w.initialNoteId,
+                  initialFile: opts?.initialFile ?? w.initialFile,
                 }
               : w
           ),
@@ -74,6 +77,7 @@ export const useWindowStore = create<WindowState>((set, get) => ({
       initialMode: opts?.initialMode,
       chromeless: opts?.chromeless,
       initialNoteId: opts?.initialNoteId,
+      initialFile: opts?.initialFile,
     };
     set((s) => ({ windows: [...s.windows, win], topZ: z }));
     return win.id;

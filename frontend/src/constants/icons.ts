@@ -24,6 +24,8 @@ export const DEFAULT_APP_ICONS: Record<AppMetaId, string> = {
   downloads: "📥",
   terminal: "💻",
   dockerctl: "🐳",
+  gallery: "🖼️",
+  pdfviewer: "📕",
 };
 
 export const APP_LABELS: Record<AppMetaId, string> = {
@@ -37,6 +39,8 @@ export const APP_LABELS: Record<AppMetaId, string> = {
   downloads: "Téléchargements",
   terminal: "Terminal",
   dockerctl: "Docker",
+  gallery: "Galerie",
+  pdfviewer: "Hadobe",
 };
 
 export type FileTypeCategory =

@@ -448,13 +448,41 @@ Chaque chemin envoyé par le client est validé pour interdire toute sortie du
 répertoire autorisé (`../`, chemins absolus...), aussi bien côté local que
 côté UNC pour le partage SMB.
 
+Double-cliquer une image ou un PDF ne le télécharge plus : ça l'ouvre
+directement dans **Galerie** ou **Hadobe** (voir plus bas) - tout autre
+type de fichier continue de se télécharger comme avant. Le menu contextuel
+(clic droit) propose aussi **Renommer**, en plus de Télécharger/Épingler/
+Supprimer déjà existants.
+
+## Galerie et Hadobe (visionneuses ouvertes depuis l'Explorateur)
+
+Deux apps ouvertes en contexte depuis l'Explorateur de fichiers (double-clic,
+ou "Ouvrir dans..." au clic droit) plutôt que lancées à vide depuis le menu
+Démarrer :
+
+- **Galerie** (images) : navigation précédente/suivante parmi les images du
+  même dossier, retouche légère (rotation, miroir, luminosité/contraste/
+  saturation) prévisualisée en direct, et "Enregistrer sous..." qui
+  applique les retouches dans un nouveau fichier PNG (jamais d'écrasement
+  de l'original).
+- **Hadobe** (PDF - clin d'œil assumé, pas le vrai Adobe) : affiche le PDF
+  directement via le moteur PDF intégré du navigateur, dans une iframe -
+  aucune bibliothèque PDF embarquée côté webdesktop.
+
+Les deux s'appuient sur un nouveau paramètre `inline=true` des endpoints de
+téléchargement (`app/routers/files.py`) : `Content-Disposition: inline`
+au lieu de `attachment`, pour que le fichier s'affiche dans la fenêtre au
+lieu de déclencher un téléchargement. Le téléchargement classique (bouton
+"Télécharger", double-clic sur un fichier qui n'est ni image ni PDF) garde
+`attachment` comme avant.
+
 ## Notes
 
-Une app "Notes" toute simple (`/api/notes`) : titre, contenu Markdown (pas
-de rendu, juste un éditeur texte), regroupement par un champ "dossier" libre
-(pas une vraie arborescence - juste une étiquette pour trier la liste).
-Sauvegarde automatique ~600ms après la dernière frappe, pas de bouton
-"Enregistrer" à chercher.
+Une app "Notes" (`/api/notes`) : titre, contenu Markdown avec aperçu en
+direct (édition / scindé / aperçu), regroupement par un champ "dossier"
+libre (pas une vraie arborescence - juste une étiquette pour trier la
+liste). Sauvegarde automatique ~600ms après la dernière frappe, pas de
+bouton "Enregistrer" à chercher.
 
 ## Téléchargements côté serveur
 
@@ -534,34 +562,38 @@ spécifiquement à enrichir le menu Démarrer.
 │       ├── full_browser.py     # Sessions mode complet (Chromium+Xvfb+x11vnc par onglet)
 │       ├── downloads.py        # Téléchargements serveur (streaming httpx)
 │       ├── local_storage.py    # Layout du dossier perso (Downloads/Desktop/...)
+│       ├── file_indexer.py     # Indexation en tâche de fond (recherche de fichiers)
 │       ├── init_db.py          # Bootstrap admin + migrations légères
 │       └── routers/
 │           ├── auth.py, admin.py, admin_users.py
 │           ├── browser_proxy.py, full_browser.py
 │           ├── bookmarks.py, events.py, files.py, notes.py, downloads.py
+│           ├── search.py       # Recherche de fichiers indexés (menu Démarrer)
 │           ├── sessions.py     # Sessions actives (liste/révocation)
-│           ├── terminal.py     # Gate admin+LAN pour l'app Terminal (proxy via Nginx)
+│           ├── terminal.py     # Gate admin+LAN pour l'app Terminal (proxy Python)
 │           ├── docker_manager.py  # Contrôle Docker (app "Docker")
 │           ├── security.py     # Sécurité perso (GET /api/security/me) - pas app/security.py (crypto/JWT)
 │           ├── desktop.py      # état de session persistant
 │           └── uploads.py      # avatars / icônes de favoris
 └── frontend/
     ├── Dockerfile               # build Vite -> Nginx
-    ├── nginx.conf               # sert le SPA + proxy /api -> backend:8000 (+ WS, + auth_request terminal)
+    ├── nginx.conf               # sert le SPA + proxy /api -> backend:8000 (+ WS)
     └── src/
         ├── api/client.ts
         ├── state/
         │   ├── authStore.ts, windowStore.ts, browserStore.ts
         │   ├── settingsStore.ts, bookmarksStore.ts, contextMenuStore.ts
         │   ├── eventsStore.ts, adminUsersStore.ts, desktopItemsStore.ts
-        │   ├── notesStore.ts, downloadsStore.ts
+        │   ├── notesStore.ts, downloadsStore.ts, customAppsStore.ts
+        │   ├── searchResults.ts    # Logique de recherche partagée (Démarrer + Ctrl+K)
         │   └── persistence.ts      # save/restore de l'état du bureau
         ├── components/
         │   ├── Login/{LoginForm,MfaDecoyForm}.tsx
+        │   ├── FilePicker/FilePicker.tsx  # Sélecteur de fichiers générique (avatar, fond d'écran...)
         │   ├── Desktop/{Desktop,Taskbar,StartMenu,ClockFlyout,ContextMenu,
         │   │            SearchOverlay,NewShortcutForm,Window,WindowManager}.tsx
         │   └── Apps/{BrowserApp(+RemoteFrame),SecurityDashboard,Settings(+UsersPanel),
-        │             FileExplorer,Notes,Downloads,Terminal,Docker}/
+        │             FileExplorer,Notes,Downloads,Terminal,Docker,Gallery,Hadobe}/
         └── styles/global.css     # thème Windows 11 (acrylique/mica)
 ```
 
